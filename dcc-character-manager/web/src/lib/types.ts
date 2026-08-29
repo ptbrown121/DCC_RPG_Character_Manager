@@ -66,6 +66,37 @@ export interface Traits {
   class?: AppliedTrait;
 }
 
+export interface LootBoxEntry {
+  tier: string;
+  type: string;
+  source: string;
+  opened: boolean;
+  contents: string;
+  at: string;
+}
+
+export interface CompanionEntry {
+  kind: "pet" | "mount" | "minion";
+  name: string;
+  species: string;
+  level: number;
+  attitude?: "hostile" | "calm" | "friendly" | "bonded";
+  role?: "tank" | "aggressive" | "utility";
+  hb_slots: number;
+  current_slots: number;
+  notes: string;
+}
+
+export interface VehicleEntry {
+  name: string;
+  move: number;
+  size: number;
+  dr: number;
+  occupancy: string;
+  current_slots: number;
+  upgrades: string;
+}
+
 export interface Character {
   id: string;
   owner_id: string;
@@ -88,6 +119,8 @@ export interface Character {
   campaign_id: string | null;
   grind: GrindState;
   social: SocialState;
+  loot: LootBoxEntry[];
+  companions: CompanionEntry[];
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -106,6 +139,7 @@ export interface Campaign {
   owner_id: string;
   name: string;
   achievements: AchievementEntry[];
+  vehicles: VehicleEntry[];
   notes: string | null;
   created_at: string;
   updated_at: string;

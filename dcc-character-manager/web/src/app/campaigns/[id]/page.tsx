@@ -16,6 +16,7 @@ import {
   typicalBossLevels,
 } from "@/lib/rules";
 import { statMod } from "@/lib/rules";
+import VehiclesPanel from "@/components/VehiclesPanel";
 import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, Character, Encounter } from "@/lib/types";
 
 const FLOOR_STATUS_COLORS: Record<CampaignFloor["status"], string> = {
@@ -293,6 +294,13 @@ function CampaignPage() {
           )}
         </ul>
       </section>
+
+      {/* Vehicles */}
+      <VehiclesPanel
+        campaign={campaign}
+        floor={floors.find((f) => f.status === "active")?.floor_number ?? 1}
+        onPatch={patchCampaign}
+      />
 
       {/* Achievements log */}
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">

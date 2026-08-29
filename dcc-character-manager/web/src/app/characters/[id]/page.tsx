@@ -30,6 +30,7 @@ import {
 import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
 import RaceClassPanel from "@/components/RaceClassPanel";
 import FameFaithPanel from "@/components/FameFaithPanel";
+import { LootPanel, CompanionsPanel } from "@/components/AssetsPanels";
 import type { Campaign, Character, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -546,6 +547,10 @@ function Sheet() {
 
       {/* Fame & Faith */}
       <FameFaithPanel character={c} onPatch={(patch) => persist(patch)} />
+
+      {/* Loot & Companions */}
+      <LootPanel character={c} onPatch={(patch) => persist(patch)} />
+      <CompanionsPanel character={c} onPatch={(patch) => persist(patch)} />
 
       {/* Wallet + notes */}
       <section className="grid gap-4 sm:grid-cols-3">

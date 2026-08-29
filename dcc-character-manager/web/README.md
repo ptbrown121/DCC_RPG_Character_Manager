@@ -1,50 +1,57 @@
-# DCC Character Manager
+# DCC Character Manager — web app
 
 Character manager and GM campaign tools for the Dungeon Crawler Carl RPG (Renegade Game
-Studios). Next.js + Supabase, deployable on Vercel. Rules data extracted in `../rules/`.
+Studios). Next.js (App Router) + Tailwind + Supabase, deployed on Vercel. All rules data was
+extracted from the owner's books into `../rules/` — those reference files are the source of
+truth for any rules question; code comments cite them by section/table.
 
-## What's here (v0)
+## Layout
 
-- **Rules engine** (`src/lib/rules/`): pure, tested functions for the game math —
-  stat mods, derived values (Health = CON Mod × 10, Mana = INT score, Evade = DEX Mod),
-  check difficulties and degrees of success, damage mitigation and slot-based HB damage,
-  the 27-debuff catalog, mob/boss builder math (HB slots, stat budgets, Surprise/Evade/DR,
-  damage dice Table 51, Boss Severity Table 50), encounter sizing (Table 49), advancement.
-- **Character model**: create crawlers at any entry point (Level 1/10/20/30), track both
-  stat layers, HB slots, Mana, AI Favor, skills with advancement marks, debuffs, gold/junk,
-  rests and the Heal spell.
-- **Encounter runner**: build encounters with the Table 49 sizing calculator and a
-  formula-driven mob/boss generator; run combat with per-mob HB slot tracks, DR-aware
-  damage application, action budgets (1+1 vs. 1-per-crawler), debuff tags, and the
-  5-step round structure.
+- `src/lib/rules/` — pure, tested rules engine. One module per subsystem (stats, derived
+  values, checks, conditions, adversary math, progression, campaign, social, assets) plus
+  `catalog/` (skills, spells, races, classes, point-buy menus — game data as TS constants).
+  Everything re-exported through `index.ts`; import via `@/lib/rules`. Tests live next to
+  the code (`*.test.ts`, vitest, `npm test`).
+- `src/lib/types.ts` — TypeScript row types matching the DB schema. jsonb columns are typed
+  here (skills, spells, traits, grind, social, loot, companions, vehicles, bosses, npcs).
+- `src/lib/supabase.ts` — browser Supabase client. Auth is email/password, client-side only
+  (no SSR cookie plumbing); every page wraps in `<AuthGate>`.
+- `src/components/` — shared panels (HbTracker, RaceClassPanel, FameFaithPanel,
+  AssetsPanels, VehiclesPanel, CatalogSelect, AuthGate).
+- `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
+  (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
+  `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
+- `supabase/migrations/` — 0001–0006, in order. All additive; RLS is owner-only
+  (`auth.uid() = owner_id`) on every table. New schema = new numbered migration; the user
+  runs them by pasting into the Supabase SQL editor.
+
+## Conventions
+
+- UI pattern: client components fetch on mount, optimistic-update local state, then persist
+  via a `persist`/`patch` helper. No server components with data.
+- The rules engine is the only place game math lives; UI calls it, never re-derives.
+- Book misprints are preserved in catalog `note:` fields and surfaced as ⚠ in the UI.
+- Supabase uses the **new API keys**: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+  (`sb_publishable_...`). Never put an `sb_secret_` key in a `NEXT_PUBLIC_` var — the
+  client throws if you do.
 
 ## Setup
 
-1. Create a Supabase project at supabase.com.
-2. In the SQL editor, run `supabase/migrations/0001_init.sql`.
-3. Enable Email auth (Authentication → Providers → Email). For local convenience you can
-   turn off email confirmation.
-4. `cp .env.example .env.local` and fill in the project URL and the **publishable** API key
-   (`sb_publishable_...`) from Project Settings → API Keys. This app uses Supabase's new
-   API-key system; don't use the legacy JWT anon key, and never put a secret key
-   (`sb_secret_...`) in a `NEXT_PUBLIC_` variable.
-5. `npm install && npm run dev`
+1. Create a Supabase project; run `supabase/migrations/0001…0006` in the SQL editor.
+2. Enable Email auth (confirmation off is convenient for local dev).
+3. `cp .env.example .env.local`; fill the project URL + publishable key.
+4. `npm install && npm run dev`
 
-## Deploy to Vercel
+## Deploy (Vercel)
 
-- Import the repo; set the **Root Directory** to `dcc-character-manager/web`.
-- Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-- Add your Vercel URL to Supabase Auth → URL Configuration → Redirect URLs.
+Root Directory = `dcc-character-manager/web`; set the two `NEXT_PUBLIC_SUPABASE_*` env vars;
+add the Vercel URL to Supabase Auth → URL Configuration.
 
-## Tests
+## Status
 
-```
-npm test
-```
-
-## Not built yet
-
-Race/class catalogs and point-buy builder, spell/skill catalogs as picklists, campaign &
-neighborhood tracker (floors, quests, timers), grinding/advancement timers, popularity/
-worship/sponsor state, loot boxes. The data models for all of these are specified in
-`../rules/*.md` §data-model sections.
+Everything in the reference files' data-model appendices is implemented: creation at all four
+entry levels, skill/spell/race/class catalogs + point-buy, sheet trackers (HB, mana, debuffs,
+grinding/advancement, fame/faith, loot boxes, companions), campaigns (floor collapse clocks,
+neighborhood/quest template, bosses → one-click encounters), the encounter runner, vehicles.
+Unbuilt ideas are polish: realtime sync between players/GM, detailed gear-slot inventory.
+`npm run build && npm test && npm run lint` should all be green before handing work back.

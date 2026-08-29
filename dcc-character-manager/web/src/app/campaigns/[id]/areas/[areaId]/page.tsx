@@ -19,6 +19,7 @@ import {
   mobMove,
   emptyScores,
   STAT_KEYS,
+  BOSS_BOX,
   type BossTier,
   type StatScores,
 } from "@/lib/rules";
@@ -230,9 +231,9 @@ function AreaEditor() {
                 >
                   {launching ? "…" : "⚔ Run as encounter"}
                 </button>
-                <label className="flex items-center gap-1 text-xs text-zinc-400">
+                <label className="flex items-center gap-1 text-xs text-zinc-400" title={`Killing blow earns a ${BOSS_BOX[(b.tier || "neighborhood") as BossTier]} Boss Box; whole party gains the tier's levels`}>
                   <input type="checkbox" checked={b.defeated} onChange={(e) => patchBoss(i, { defeated: e.target.checked })} />
-                  defeated {b.defeated && "💀"}
+                  defeated {b.defeated && `💀 (${BOSS_BOX[(b.tier || "neighborhood") as BossTier]} Boss Box)`}
                 </label>
                 <button onClick={() => persist({ bosses: area.bosses.filter((_, j) => j !== i) })} className="text-zinc-600 hover:text-red-400">✕</button>
               </div>
