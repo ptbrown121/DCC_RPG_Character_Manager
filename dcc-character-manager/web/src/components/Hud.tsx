@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { assetUrl } from "@/lib/upload";
+import { AssetPicker } from "./AssetLibrary";
 import type { SceneState, SpellRow } from "@/lib/types";
 
 /*
@@ -295,6 +297,8 @@ export function GmSendPanel({
   const [sceneCaption, setSceneCaption] = useState(scene?.caption ?? "");
   const [status, setStatus] = useState<string | null>(null);
   const [hidden, setHidden] = useState<HudElement[]>([]);
+  // Which field the asset library is picking an image for.
+  const [picker, setPicker] = useState<"send" | "scene" | null>(null);
   const channels = useRef<Map<string, RealtimeChannel>>(new Map());
 
   useEffect(() => {
@@ -390,6 +394,13 @@ export function GmSendPanel({
           className="w-56 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs"
         />
         <button
+          onClick={() => setPicker("send")}
+          className="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700"
+          title="Pick from the asset library"
+        >
+          📁
+        </button>
+        <button
           onClick={send}
           className="rounded bg-violet-700 px-3 py-1 font-semibold hover:bg-violet-600"
         >
@@ -409,6 +420,13 @@ export function GmSendPanel({
               onChange={(e) => setSceneUrl(e.target.value)}
               className="min-w-56 flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1"
             />
+            <button
+              onClick={() => setPicker("scene")}
+              className="rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700"
+              title="Pick from the asset library"
+            >
+              📁
+            </button>
             <input
               placeholder="Caption"
               value={sceneCaption}
@@ -457,6 +475,23 @@ export function GmSendPanel({
         </button>
       </div>
       {status && <p className="mt-2 text-xs text-emerald-400">{status}</p>}
+      {picker && (
+        <AssetPicker
+          campaignId={campaignId}
+          title={picker === "send" ? "System send image" : "Area feed image"}
+          onClose={() => setPicker(null)}
+          onPick={(asset) => {
+            const url = assetUrl(asset.storage_path);
+            if (picker === "send") {
+              setImageUrl(url);
+            } else {
+              setSceneUrl(url);
+              if (!sceneCaption.trim()) setSceneCaption(asset.name);
+            }
+            setPicker(null);
+          }}
+        />
+      )}
     </section>
   );
 }

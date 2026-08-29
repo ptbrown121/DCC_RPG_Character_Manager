@@ -18,6 +18,7 @@ import {
 import { statMod } from "@/lib/rules";
 import VehiclesPanel from "@/components/VehiclesPanel";
 import { GmSendPanel } from "@/components/Hud";
+import { AssetLibrary } from "@/components/AssetLibrary";
 import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, CampaignMember, Character, Encounter } from "@/lib/types";
 
 /** Client-generated 6-char invite code (collision odds are cosmic; column is unique anyway). */
@@ -360,6 +361,9 @@ function CampaignPage() {
           onSceneChange={(scene) => patchCampaign({ scene })}
         />
       )}
+
+      {/* Uploaded images: maps, tokens, item icons (GM manages; members see via pickers) */}
+      {isGm && <AssetLibrary campaignId={id} />}
 
       <section className="space-y-3">
         {floors.map((f) => (
