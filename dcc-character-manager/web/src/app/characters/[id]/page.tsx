@@ -47,6 +47,7 @@ import {
   type HudNotification,
   type SystemSend,
 } from "@/components/Hud";
+import { ActiveMapStage } from "@/components/MapStage";
 import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -108,6 +109,9 @@ function Sheet() {
   const [mode, setMode] = useState<"play" | "manage">("play");
   // Live Area-feed updates override the persisted one fetched with the campaign.
   const [liveScene, setLiveScene] = useState<SceneState | null>(null);
+  // Live active-map switches likewise override campaigns.active_map_id
+  // (undefined = no broadcast heard yet, fall back to the row).
+  const [liveMapId, setLiveMapId] = useState<string | null | undefined>(undefined);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -118,6 +122,10 @@ function Sheet() {
     onScene: (scene) => {
       setLiveScene(scene);
       notify("floor", scene.imageUrl || scene.caption ? "Area feed updated." : "Area feed cleared.");
+    },
+    onMapState: ({ activeMapId }) => {
+      setLiveMapId(activeMapId);
+      notify("floor", activeMapId ? "Tactical map online." : "Tactical map feed closed.");
     },
   });
 
@@ -350,8 +358,17 @@ function Sheet() {
         {mode === "play" ? "🛠 MANAGE SHEET" : "🎮 RETURN TO PLAY"}
       </button>
 
-      {/* What the party is looking at (GM-controlled, persisted on the campaign) */}
-      <SceneStage scene={liveScene ?? campaigns.find((cp) => cp.id === c.campaign_id)?.scene ?? null} />
+      {/* What the party is looking at (GM-controlled, persisted on the campaign):
+          the tabletop map when one is active, otherwise the image Area feed. */}
+      {(() => {
+        const campaign = campaigns.find((cp) => cp.id === c.campaign_id);
+        const activeMapId = liveMapId !== undefined ? liveMapId : (campaign?.active_map_id ?? null);
+        return activeMapId ? (
+          <ActiveMapStage mapId={activeMapId} />
+        ) : (
+          <SceneStage scene={liveScene ?? campaign?.scene ?? null} />
+        );
+      })()}
 
       {/* Play mode: side rail opens skills / spells / inventory / companions as
           floating panels, keeping the center clear for the Area feed. */}

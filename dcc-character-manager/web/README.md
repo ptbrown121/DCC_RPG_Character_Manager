@@ -49,7 +49,12 @@ truth for any rules question; code comments cite them by section/table.
   0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
   drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
   GM manages maps in `MapManager.tsx` on the campaign page; switching the active
-  map broadcasts `map_state` on the campaign channel). All additive. RLS baseline is owner-only
+  map broadcasts `map_state` on the campaign channel. `MapStage.tsx` renders the
+  tabletop itself: one SVG with a pan/zoomable group (drag to pan, wheel zoom
+  anchored on the cursor, double-click/⤢ to refit; math in `src/lib/stage.ts`,
+  vitest-covered). Player sheets show `ActiveMapStage` center-stage whenever the
+  campaign has an active map — the image Area feed is the fallback — swapping
+  live on `map_state` and reading the row on load). All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
   header) and members get read access to the campaign row (incl. scene), floors, areas,

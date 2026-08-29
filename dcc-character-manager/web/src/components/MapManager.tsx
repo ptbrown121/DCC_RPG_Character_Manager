@@ -6,39 +6,12 @@ import { supabase } from "@/lib/supabase";
 import { assetUrl } from "@/lib/upload";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
+import { MapStage } from "./MapStage";
 import type { AssetRow, Campaign, MapGrid, MapRow } from "@/lib/types";
 
 export const DEFAULT_GRID: MapGrid = { ftPerSquare: 5, pxPerSquare: 100, offsetX: 0, offsetY: 0, show: true };
 
-/** SVG grid lines for a map background — shared by the preview here and MapStage (T5). */
-export function MapGridLines({ grid, width, height, idSuffix }: { grid: MapGrid; width: number; height: number; idSuffix: string }) {
-  if (!grid.show || grid.pxPerSquare <= 0) return null;
-  const patternId = `map-grid-${idSuffix}`;
-  return (
-    <>
-      <defs>
-        <pattern
-          id={patternId}
-          width={grid.pxPerSquare}
-          height={grid.pxPerSquare}
-          x={grid.offsetX}
-          y={grid.offsetY}
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d={`M ${grid.pxPerSquare} 0 L 0 0 0 ${grid.pxPerSquare}`}
-            fill="none"
-            stroke="rgba(255,255,255,0.28)"
-            strokeWidth={Math.max(1, width / 1200)}
-          />
-        </pattern>
-      </defs>
-      <rect width={width} height={height} fill={`url(#${patternId})`} pointerEvents="none" />
-    </>
-  );
-}
-
-/** Small live preview: background image + calibrated grid overlay. */
+/** Live grid-calibration preview: the real pan/zoom stage, GM's-eye view. */
 function MapPreview({ map, asset }: { map: MapRow; asset: AssetRow | undefined }) {
   if (!asset) {
     return (
@@ -48,10 +21,13 @@ function MapPreview({ map, asset }: { map: MapRow; asset: AssetRow | undefined }
     );
   }
   return (
-    <svg viewBox={`0 0 ${asset.width} ${asset.height}`} className="w-full rounded border border-zinc-800 bg-zinc-950">
-      <image href={assetUrl(asset.storage_path)} width={asset.width} height={asset.height} />
-      <MapGridLines grid={map.grid} width={asset.width} height={asset.height} idSuffix={`preview-${map.id}`} />
-    </svg>
+    <MapStage
+      imageUrl={assetUrl(asset.storage_path)}
+      width={asset.width}
+      height={asset.height}
+      grid={map.grid}
+      className="h-80 w-full rounded border border-zinc-800"
+    />
   );
 }
 
