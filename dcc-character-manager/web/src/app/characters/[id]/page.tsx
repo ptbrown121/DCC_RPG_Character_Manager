@@ -266,24 +266,19 @@ function Sheet() {
             {[c.race, c.class].filter(Boolean).join(" ") || "no race/class yet (Floor 3 unlock)"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">
-            {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : saveState === "saved" ? "Saved" : ""}
-          </span>
-          {(["play", "manage"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`rounded px-2 py-1 font-display text-xs tracking-wider ${
-                mode === m ? "bg-amber-500 font-semibold text-zinc-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-              }`}
-              title={m === "play" ? "Combat view — bookkeeping hidden, stage for the Area feed" : "Full editable sheet"}
-            >
-              {m === "play" ? "🎮 PLAY" : "🛠 MANAGE"}
-            </button>
-          ))}
-        </div>
+        <span className="text-xs text-zinc-500">
+          {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : saveState === "saved" ? "Saved" : ""}
+        </span>
       </header>
+
+      {/* Mode switch lives in the HUD corner, not the content column */}
+      <button
+        onClick={() => setMode(mode === "play" ? "manage" : "play")}
+        className="hud-item fixed bottom-3 left-3 z-40 rounded border border-zinc-700 bg-zinc-950/90 px-3 py-1.5 font-display text-xs tracking-wider text-zinc-300 hover:border-amber-600"
+        title={mode === "play" ? "Open the full editable sheet" : "Back to the combat view (bookkeeping hidden)"}
+      >
+        {mode === "play" ? "🛠 MANAGE SHEET" : "🎮 RETURN TO PLAY"}
+      </button>
 
       {/* What the party is looking at (GM-controlled, persisted on the campaign) */}
       <SceneStage scene={liveScene ?? campaigns.find((cp) => cp.id === c.campaign_id)?.scene ?? null} />
