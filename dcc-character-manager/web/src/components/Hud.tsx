@@ -86,6 +86,7 @@ export function HudBars({
   maxMana,
   collapseLabel,
   collapseUrgent,
+  children,
 }: {
   hbSlots: number;
   slotValue: number;
@@ -93,27 +94,42 @@ export function HudBars({
   maxMana: number;
   collapseLabel: string | null;
   collapseUrgent: boolean;
+  /** Compact combat controls revealed when the crawler focuses on their bars. */
+  children?: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
   const hpColor = hbSlots <= 3 ? "bg-red-500" : hbSlots <= 5 ? "bg-amber-400" : "bg-emerald-500";
   return (
-    <div className="hud-item fixed right-3 top-16 z-40 w-60 space-y-1 rounded border border-zinc-800 bg-zinc-950/90 p-2">
-      <div className="flex items-center gap-1" title={`${hbSlots * slotValue} HP (${hbSlots}/10 slots × ${slotValue})`}>
-        <span className="w-8 font-display text-[10px] tracking-wider text-zinc-400">HP</span>
-        <div className="grid flex-1 grid-cols-10 gap-px">
-          {Array.from({ length: 10 }, (_, i) => (
-            <div key={i} className={`h-2.5 first:rounded-l last:rounded-r ${i < hbSlots ? hpColor : "bg-zinc-800"}`} />
-          ))}
+    <div
+      className={`hud-item fixed right-3 top-16 z-40 rounded border border-zinc-800 bg-zinc-950/90 p-2 ${open ? "w-80" : "w-60"}`}
+    >
+      <button
+        type="button"
+        onClick={() => children && setOpen(!open)}
+        className="block w-full space-y-1 text-left"
+        title={children ? (open ? "Close" : "Focus on your bars to interact") : undefined}
+      >
+        <div className="flex items-center gap-1" title={`${hbSlots * slotValue} HP (${hbSlots}/10 slots × ${slotValue})`}>
+          <span className="w-8 font-display text-[10px] tracking-wider text-zinc-400">HP</span>
+          <div className="grid flex-1 grid-cols-10 gap-px">
+            {Array.from({ length: 10 }, (_, i) => (
+              <div key={i} className={`h-2.5 first:rounded-l last:rounded-r ${i < hbSlots ? hpColor : "bg-zinc-800"}`} />
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1" title={`${mana}/${maxMana} Mana`}>
-        <span className="w-8 font-display text-[10px] tracking-wider text-zinc-400">MP</span>
-        <div className="h-2 flex-1 overflow-hidden rounded bg-zinc-800">
-          <div className="h-full rounded bg-sky-500" style={{ width: maxMana > 0 ? `${(mana / maxMana) * 100}%` : "0%" }} />
+        <div className="flex items-center gap-1" title={`${mana}/${maxMana} Mana`}>
+          <span className="w-8 font-display text-[10px] tracking-wider text-zinc-400">MP</span>
+          <div className="h-2 flex-1 overflow-hidden rounded bg-zinc-800">
+            <div className="h-full rounded bg-sky-500" style={{ width: maxMana > 0 ? `${(mana / maxMana) * 100}%` : "0%" }} />
+          </div>
         </div>
-      </div>
-      <div className={`pt-0.5 text-right font-display text-[10px] tracking-wider ${collapseUrgent ? "animate-hud-blink text-red-400" : "text-zinc-400"}`}>
-        {collapseLabel ? <>⏳ COLLAPSE {collapseLabel}</> : <span className="text-zinc-600">NO FLOOR TIMER</span>}
-      </div>
+        <div className={`pt-0.5 text-right font-display text-[10px] tracking-wider ${collapseUrgent ? "animate-hud-blink text-red-400" : "text-zinc-400"}`}>
+          {collapseLabel ? <>⏳ COLLAPSE {collapseLabel}</> : <span className="text-zinc-600">NO FLOOR TIMER</span>}
+        </div>
+      </button>
+      {open && children && (
+        <div className="animate-hud-materialize mt-2 border-t border-zinc-800 pt-2">{children}</div>
+      )}
     </div>
   );
 }
@@ -169,6 +185,44 @@ export function Minimap({ floor, label }: { floor: number; label: string | null 
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Vertical rail of HUD tabs on the left edge (play mode): skills, spells,
+ * inventory, companions… Selecting one opens a floating panel beside the rail,
+ * keeping the center of the screen clear for the Area feed.
+ */
+export function HudRail({
+  tabs,
+}: {
+  tabs: { key: string; label: string; content: React.ReactNode }[];
+}) {
+  const [active, setActive] = useState<string | null>(null);
+  const current = tabs.find((t) => t.key === active);
+  return (
+    <>
+      <div className="hud-item fixed left-3 top-28 z-40 flex flex-col gap-1">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActive(active === t.key ? null : t.key)}
+            className={`rounded border px-3 py-1.5 text-left font-display text-xs tracking-wider ${
+              active === t.key
+                ? "border-amber-600 bg-zinc-900 text-amber-300"
+                : "border-zinc-700 bg-zinc-950/90 text-zinc-300 hover:border-amber-600"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {current && (
+        <div className="animate-hud-materialize fixed left-40 top-28 z-40 max-h-[70vh] w-[26rem] max-w-[75vw] overflow-y-auto rounded border border-zinc-800 bg-zinc-950/95 p-3">
+          {current.content}
+        </div>
+      )}
+    </>
   );
 }
 

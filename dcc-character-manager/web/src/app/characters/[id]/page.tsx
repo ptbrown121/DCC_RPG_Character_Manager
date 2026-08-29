@@ -36,6 +36,7 @@ import FameFaithPanel from "@/components/FameFaithPanel";
 import { LootPanel, CompanionsPanel } from "@/components/AssetsPanels";
 import {
   HudBars,
+  HudRail,
   Hotlist,
   Minimap,
   NotificationsHud,
@@ -248,7 +249,70 @@ function Sheet() {
           maxMana={maxMana}
           collapseLabel={collapseRemaining != null ? formatDungeonTime(collapseRemaining) : null}
           collapseUrgent={collapseRemaining != null && collapseRemaining <= DUNGEON_DAY_HOURS}
-        />
+        >
+          <div className="space-y-2 text-xs">
+            {c.current_hb_slots === 0 && (
+              <p className="font-semibold text-red-400">DYING — countdown {mods.con} rounds.</p>
+            )}
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                placeholder="Damage"
+                value={damageIn}
+                onChange={(e) => setDamageIn(e.target.value)}
+                className="w-20 rounded border border-zinc-700 bg-zinc-800 px-2 py-1"
+              />
+              <label className="text-zinc-400">
+                DR{" "}
+                <input
+                  type="number"
+                  value={drIn}
+                  onChange={(e) => setDrIn(e.target.value)}
+                  className="w-12 rounded border border-zinc-700 bg-zinc-800 px-1 py-1"
+                />
+              </label>
+              <button onClick={applyDamage} className="rounded bg-red-600 px-2 py-1 font-semibold hover:bg-red-500">
+                Hit
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <button className="rounded bg-zinc-800 px-1.5 py-0.5" onClick={() => persist({ current_mana: Math.max(0, c.current_mana - 1) })}>−1 MP</button>
+              <button className="rounded bg-zinc-800 px-1.5 py-0.5" onClick={() => persist({ current_mana: Math.min(maxMana, c.current_mana + 1) })}>+1 MP</button>
+              <button className="rounded bg-emerald-800 px-1.5 py-0.5 hover:bg-emerald-700" onClick={() => persist({ current_hb_slots: Math.min(10, c.current_hb_slots + REST_RULES.healSpellSlots), current_mana: Math.max(0, c.current_mana - 2) })}>
+                Heal
+              </button>
+              <button className="rounded bg-zinc-800 px-1.5 py-0.5 hover:bg-zinc-700" onClick={shortRest}>Short rest</button>
+              <button className="rounded bg-zinc-800 px-1.5 py-0.5 hover:bg-zinc-700" onClick={longRest}>Long rest</button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              {c.debuffs.map((d, i) => (
+                <span key={`${d.name}-${i}`} className="inline-flex items-center gap-1 rounded-full border border-red-900 bg-red-950 px-2 py-0.5 text-red-300">
+                  {d.name}
+                  <button onClick={() => persist({ debuffs: c.debuffs.filter((_, j) => j !== i) })} className="text-red-500 hover:text-white">✕</button>
+                </span>
+              ))}
+              <select
+                value={debuffPick}
+                onChange={(e) => setDebuffPick(e.target.value)}
+                className="rounded border border-zinc-700 bg-zinc-800 px-1 py-0.5"
+              >
+                {DEBUFFS.map((d) => (
+                  <option key={d.name} value={d.name} title={d.effect}>{d.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  const def = DEBUFFS.find((x) => x.name === debuffPick)!;
+                  if (!def.stackable && c.debuffs.some((d) => d.name === debuffPick)) return;
+                  persist({ debuffs: [...c.debuffs, { name: debuffPick }] });
+                }}
+                className="rounded bg-zinc-800 px-1.5 py-0.5 hover:bg-zinc-700"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </HudBars>
       )}
       {!hudHidden.includes("hotlist") && (
         <Hotlist spells={hotlisted} mana={c.current_mana} onCast={castSpell} />
@@ -265,6 +329,12 @@ function Sheet() {
             Level {c.level} · Floor {c.floor} ·{" "}
             {[c.race, c.class].filter(Boolean).join(" ") || "no race/class yet (Floor 3 unlock)"}
           </p>
+          {mode === "play" && (
+            <p className="mt-1 font-mono text-xs text-zinc-500">
+              {STAT_KEYS.map((k) => `${k.toUpperCase()} ${c.stats.enhanced[k]}(+${statMod(c.stats.enhanced[k])})`).join(" · ")}
+              {` · Evade d20+${mods.dex} · Move ${c.move_ft} ft · AI Favor ${c.ai_favor}`}
+            </p>
+          )}
         </div>
         <span className="text-xs text-zinc-500">
           {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : saveState === "saved" ? "Saved" : ""}
@@ -283,20 +353,120 @@ function Sheet() {
       {/* What the party is looking at (GM-controlled, persisted on the campaign) */}
       <SceneStage scene={liveScene ?? campaigns.find((cp) => cp.id === c.campaign_id)?.scene ?? null} />
 
-      {/* Play mode: one readonly line of stats instead of the editable grid */}
+      {/* Play mode: side rail opens skills / spells / inventory / companions as
+          floating panels, keeping the center clear for the Area feed. */}
       {mode === "play" && (
-        <section className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm">
-          {STAT_KEYS.map((k) => (
-            <span key={k} className="text-zinc-300">
-              <span className="text-xs uppercase text-zinc-500">{STAT_LABELS[k]}</span>{" "}
-              <b className="font-display">{c.stats.enhanced[k]}</b>
-              <span className="font-mono text-xs text-emerald-400"> +{statMod(c.stats.enhanced[k])}</span>
-            </span>
-          ))}
-          <span className="text-xs text-zinc-400">
-            Evade d20 +{mods.dex} · Move {c.move_ft} ft · AI Favor {c.ai_favor}
-          </span>
-        </section>
+        <HudRail
+          tabs={[
+            {
+              key: "skills",
+              label: "🎲 SKILLS",
+              content: (
+                <ul className="space-y-1 text-sm">
+                  {c.skills.map((s, i) => (
+                    <li key={`${s.name}-${i}`} className="flex items-center justify-between gap-2">
+                      <span>
+                        {s.name}
+                        <span className="ml-2 text-xs uppercase text-zinc-500">{s.stat ?? ""}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-emerald-400">
+                          {s.check_type === "passive" ? "passive" : `d20 +${s.rank + (s.stat ? mods[s.stat as StatKey] : 0)}`}
+                        </span>
+                        <label className="flex items-center gap-1 text-xs text-zinc-500" title="Mark on any attempt">
+                          <input type="checkbox" checked={s.marked} onChange={(e) => updateSkill(i, { marked: e.target.checked })} />
+                        </label>
+                      </span>
+                    </li>
+                  ))}
+                  {c.skills.length === 0 && <li className="text-xs text-zinc-500">No skills yet — add them in Manage.</li>}
+                </ul>
+              ),
+            },
+            {
+              key: "spells",
+              label: "✨ SPELLS",
+              content: (
+                <ul className="space-y-1 text-sm">
+                  {c.spells.map((sp, i) => (
+                    <li key={`${sp.name}-${i}`} className="flex items-center justify-between gap-2">
+                      <span>
+                        {sp.name}
+                        <span className="ml-2 text-xs text-zinc-500">R{sp.rank} · {sp.mana}mp · {sp.effect}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (!sp.hotlist && hotlisted.length >= 10) return;
+                            persist({ spells: c.spells.map((s, j) => (j === i ? { ...s, hotlist: !s.hotlist } : s)) });
+                          }}
+                          className={sp.hotlist ? "text-amber-400" : "text-zinc-600 hover:text-amber-400"}
+                          title="Toggle Hotlist"
+                        >
+                          {sp.hotlist ? "★" : "☆"}
+                        </button>
+                        <button
+                          disabled={c.current_mana < sp.mana}
+                          onClick={() => castSpell(sp)}
+                          className="rounded bg-indigo-700 px-2 py-0.5 text-xs font-semibold hover:bg-indigo-600 disabled:opacity-40"
+                        >
+                          Cast
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                  {c.spells.length === 0 && <li className="text-xs text-zinc-500">No spells known.</li>}
+                </ul>
+              ),
+            },
+            {
+              key: "inventory",
+              label: "🎒 INVENTORY",
+              content: (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-3">
+                    <span>
+                      Gold <b className="font-display">{c.gold}</b>
+                    </span>
+                    <button className="rounded bg-zinc-800 px-2" onClick={() => persist({ gold: Math.max(0, c.gold - 1) })}>−</button>
+                    <button className="rounded bg-zinc-800 px-2" onClick={() => persist({ gold: c.gold + 1 })}>+</button>
+                    <span className="ml-2">
+                      Junk <b className="font-display">{c.misc_junk}</b>
+                    </span>
+                    <button className="rounded bg-zinc-800 px-2" onClick={() => persist({ misc_junk: Math.max(0, c.misc_junk - 1) })}>−</button>
+                    <button className="rounded bg-zinc-800 px-2" onClick={() => persist({ misc_junk: c.misc_junk + 1 })}>+</button>
+                  </div>
+                  <ul className="space-y-1 text-xs">
+                    {c.loot.map((box, i) => (
+                      <li key={i} className={box.opened ? "text-zinc-600 line-through" : "text-zinc-300"}>
+                        {box.tier} {box.type}
+                        {box.contents && <span className="text-zinc-500"> — {box.contents}</span>}
+                      </li>
+                    ))}
+                    {c.loot.length === 0 && <li className="text-zinc-500">No loot boxes.</li>}
+                  </ul>
+                </div>
+              ),
+            },
+            {
+              key: "companions",
+              label: "🐾 COMPANIONS",
+              content: (
+                <ul className="space-y-1 text-sm">
+                  {c.companions.map((cp, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2">
+                      <span>
+                        {cp.name} <span className="text-xs text-zinc-500">{cp.kind} · {cp.species} · Lv {cp.level}</span>
+                      </span>
+                      <span className="font-mono text-xs text-emerald-400">HB {cp.current_slots}/{cp.hb_slots}</span>
+                    </li>
+                  ))}
+                  {c.companions.length === 0 && <li className="text-xs text-zinc-500">No companions. Every crawler needs a Mongo.</li>}
+                </ul>
+              ),
+            },
+          ]}
+        />
       )}
 
       {/* Stats */}
@@ -355,6 +525,7 @@ function Sheet() {
       {mode === "manage" && <RaceClassPanel character={c} onApply={(patch) => persist(patch)} />}
 
       {/* Health & Mana */}
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="mb-3 font-semibold">Health Bar</h2>
         <HbTracker
@@ -411,8 +582,10 @@ function Sheet() {
           </button>
         </div>
       </section>
+      )}
 
       {/* Debuffs */}
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="mb-3 font-semibold">Debuffs</h2>
         <div className="mb-3 flex flex-wrap gap-2">
@@ -454,8 +627,10 @@ function Sheet() {
           </span>
         </div>
       </section>
+      )}
 
       {/* Skills */}
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Skills</h2>
@@ -607,8 +782,10 @@ function Sheet() {
           </tbody>
         </table>
       </section>
+      )}
 
       {/* Spells */}
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Spells</h2>
@@ -687,6 +864,7 @@ function Sheet() {
           {c.spells.length === 0 && <li className="text-xs text-zinc-500">No spells known.</li>}
         </ul>
       </section>
+      )}
 
       {/* Fame & Faith */}
       {mode === "manage" && <FameFaithPanel character={c} onPatch={(patch) => persist(patch)} />}
