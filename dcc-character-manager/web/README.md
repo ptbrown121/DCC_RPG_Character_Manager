@@ -14,6 +14,13 @@ truth for any rules question; code comments cite them by section/table.
   the code (`*.test.ts`, vitest, `npm test`).
 - `src/lib/types.ts` — TypeScript row types matching the DB schema. jsonb columns are typed
   here (skills, spells, traits, grind, social, loot, companions, vehicles, bosses, npcs).
+- `src/lib/upload.ts` — image asset pipeline (migration 0009): every upload is
+  downscaled client-side (canvas → webp, maps ≤ 2560px, tokens/item icons ≤ 512px)
+  before landing in the public `assets` Storage bucket under `{auth.uid()}/{uuid}.webp`
+  (paths unguessable; storage policies restrict writes to your own folder). Each object
+  gets a row in the `assets` table (kind: map/token/item/misc, campaign-scoped,
+  member-readable) so the UI lists via Postgres, never `storage.list()`. Use
+  `uploadAsset`/`assetUrl`/`deleteAsset` — never upload originals directly.
 - `src/lib/supabase.ts` — browser Supabase client. Auth is email/password or Google OAuth
   (PKCE, handled entirely client-side — no SSR cookie plumbing, no callback route; the
   browser client auto-exchanges the `?code=` on return). Every page wraps in `<AuthGate>`.
@@ -37,7 +44,8 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0008, in order. All additive. RLS baseline is owner-only
+- `supabase/migrations/` — 0001–0009, in order (0009 also creates the `assets`
+  storage bucket + its `storage.objects` policies via SQL — no dashboard steps). All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
   header) and members get read access to the campaign row (incl. scene), floors, areas,
@@ -59,7 +67,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0008` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0009` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`

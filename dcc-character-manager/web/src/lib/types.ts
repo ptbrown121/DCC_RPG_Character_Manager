@@ -157,6 +157,22 @@ export interface Campaign {
   updated_at: string;
 }
 
+/** What an uploaded image is for; drives the downscale cap and library filters. */
+export type AssetKind = "map" | "token" | "item" | "misc";
+
+/** An uploaded image in the `assets` storage bucket (migration 0009). */
+export interface AssetRow {
+  id: string;
+  owner_id: string;
+  campaign_id: string;
+  kind: AssetKind;
+  name: string;
+  storage_path: string;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
 /** A player account that joined a campaign via join code (migration 0008). */
 export interface CampaignMember {
   campaign_id: string;
