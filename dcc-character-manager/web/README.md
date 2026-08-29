@@ -14,8 +14,11 @@ truth for any rules question; code comments cite them by section/table.
   the code (`*.test.ts`, vitest, `npm test`).
 - `src/lib/types.ts` — TypeScript row types matching the DB schema. jsonb columns are typed
   here (skills, spells, traits, grind, social, loot, companions, vehicles, bosses, npcs).
-- `src/lib/supabase.ts` — browser Supabase client. Auth is email/password, client-side only
-  (no SSR cookie plumbing); every page wraps in `<AuthGate>`.
+- `src/lib/supabase.ts` — browser Supabase client. Auth is email/password or Google OAuth
+  (PKCE, handled entirely client-side — no SSR cookie plumbing, no callback route; the
+  browser client auto-exchanges the `?code=` on return). Every page wraps in `<AuthGate>`.
+  Google requires the provider enabled in Supabase plus the site URLs (localhost + Vercel)
+  in Auth → URL Configuration → Redirect URLs.
 - `src/components/` — shared panels (HbTracker, RaceClassPanel, FameFaithPanel,
   AssetsPanels, VehiclesPanel, CatalogSelect, AuthGate).
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
