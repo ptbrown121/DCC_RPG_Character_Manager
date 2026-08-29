@@ -17,6 +17,7 @@ import {
 } from "@/lib/rules";
 import { statMod } from "@/lib/rules";
 import VehiclesPanel from "@/components/VehiclesPanel";
+import { GmSendPanel } from "@/components/Hud";
 import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, Character, Encounter } from "@/lib/types";
 
 const FLOOR_STATUS_COLORS: Record<CampaignFloor["status"], string> = {
@@ -262,6 +263,9 @@ function CampaignPage() {
           )}
         </div>
       </section>
+
+      {/* System sends to player HUDs (party-wide or private) + HUD element control */}
+      <GmSendPanel campaignId={id} party={party.map((p) => ({ id: p.id, name: p.name }))} />
 
       <section className="space-y-3">
         {floors.map((f) => (

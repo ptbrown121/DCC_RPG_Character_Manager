@@ -20,7 +20,15 @@ truth for any rules question; code comments cite them by section/table.
   Google requires the provider enabled in Supabase plus the site URLs (localhost + Vercel)
   in Auth → URL Configuration → Redirect URLs.
 - `src/components/` — shared panels (HbTracker, RaceClassPanel, FameFaithPanel,
-  AssetsPanels, VehiclesPanel, CatalogSelect, AuthGate).
+  AssetsPanels, VehiclesPanel, CatalogSelect, AuthGate, NavBar) plus `Hud.tsx`: the
+  in-fiction HUD chrome on the character sheet (book default layout — notifications ↖,
+  HP/MP bars + collapse timer ↗, 10-slot Hotlist ↓, minimap ↘; elements idle dimmed and
+  focus on hover). `Hud.tsx` also holds the Supabase Realtime plumbing: the GM's "System
+  Send" panel (campaign page) broadcasts messages/images to `hud:campaign:<id>` (party)
+  or `hud:character:<id>` (private), and can push a `hud_config` that switches HUD
+  elements off on player screens. Sends are ephemeral broadcast — no tables involved,
+  receiving sheets must be open, and private targeting is client-side convenience, not a
+  security boundary.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).

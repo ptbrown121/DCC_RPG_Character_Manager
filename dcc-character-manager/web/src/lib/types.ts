@@ -37,6 +37,8 @@ export interface SpellRow {
   range?: string;
   effect?: string;
   rank: number;
+  /** Pinned to one of the 10 HUD Hotlist slots (spells must be hotlisted to cast in combat). */
+  hotlist?: boolean;
   notes?: string;
 }
 

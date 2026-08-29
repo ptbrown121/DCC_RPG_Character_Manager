@@ -6,6 +6,9 @@ import AuthGate from "@/components/AuthGate";
 import HbTracker from "@/components/HbTracker";
 import { supabase } from "@/lib/supabase";
 import {
+  DUNGEON_DAY_HOURS,
+  formatDungeonTime,
+  hoursRemaining,
   STAT_KEYS,
   STAT_LABELS,
   statMod,
@@ -31,7 +34,18 @@ import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
 import RaceClassPanel from "@/components/RaceClassPanel";
 import FameFaithPanel from "@/components/FameFaithPanel";
 import { LootPanel, CompanionsPanel } from "@/components/AssetsPanels";
-import type { Campaign, Character, SkillRow, SpellRow } from "@/lib/types";
+import {
+  HudBars,
+  Hotlist,
+  Minimap,
+  NotificationsHud,
+  SystemOverlay,
+  useSystemSends,
+  type HudElement,
+  type HudNotification,
+  type SystemSend,
+} from "@/components/Hud";
+import type { Campaign, CampaignFloor, Character, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +56,15 @@ function Sheet() {
   const [debuffPick, setDebuffPick] = useState(DEBUFFS[0].name);
   const [rollLog, setRollLog] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [notifications, setNotifications] = useState<HudNotification[]>([
+    { kind: "system", text: "Welcome, Crawler. Try not to die today.", at: 0 },
+  ]);
+  const [overlay, setOverlay] = useState<SystemSend | null>(null);
+  const [activeFloor, setActiveFloor] = useState<CampaignFloor | null>(null);
+
+  const notify = useCallback((kind: HudNotification["kind"], text: string) => {
+    setNotifications((prev) => [...prev, { kind, text, at: Date.now() }]);
+  }, []);
 
   useEffect(() => {
     supabase()
@@ -55,6 +78,38 @@ function Sheet() {
       .select("*")
       .then(({ data }) => setCampaigns((data as Campaign[]) ?? []));
   }, [id]);
+
+  // Collapse countdown for the linked campaign's active floor.
+  const campaignId = c?.campaign_id ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const floor = campaignId
+        ? ((
+            await supabase()
+              .from("campaign_floors")
+              .select("*")
+              .eq("campaign_id", campaignId)
+              .eq("status", "active")
+              .limit(1)
+          ).data?.[0] as CampaignFloor | undefined) ?? null
+        : null;
+      if (!cancelled) setActiveFloor(floor);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId]);
+
+  const [hudHidden, setHudHidden] = useState<HudElement[]>([]);
+  useSystemSends(id, c?.campaign_id ?? null, {
+    onSend: (send) => {
+      setOverlay(send);
+      notify("system", send.text || "The AI shows you something.");
+    },
+    // GM switching HUD elements off (interviews, or the AI being "funny").
+    onConfig: (config) => setHudHidden(config.hidden),
+  });
 
   const derived = useMemo(() => (c ? deriveFromEnhanced(c.stats.enhanced, c.move_ft) : null), [c]);
 
@@ -78,7 +133,10 @@ function Sheet() {
     if (!raw || raw <= 0) return;
     const afterDr = mitigateDamage(raw, { dr: Number(drIn) || 0 });
     const lost = slotsLostToDamage(afterDr, hbSlotValue);
-    persist({ current_hb_slots: Math.max(0, c.current_hb_slots - lost) });
+    const remaining = Math.max(0, c.current_hb_slots - lost);
+    persist({ current_hb_slots: remaining });
+    notify("crawler", `You took ${afterDr} damage (${lost} slot${lost === 1 ? "" : "s"}).`);
+    if (remaining === 0) notify("system", "You are DYING. This is going to be great for ratings.");
     setDamageIn("");
   }
 
@@ -108,6 +166,7 @@ function Sheet() {
     setRollLog(
       `${s.name}: rolled ${d20} vs Rank ${s.rank} — ${passed ? `Rank up! Now ${s.rank + 1}` : s.rank >= rankCap ? `at the Rank ${rankCap} cap` : "no change"}`,
     );
+    if (passed) notify("crawler", `Skill level up! ${s.name} is now Rank ${s.rank + 1}.`);
     persist({
       skills: c.skills.map((row, j) =>
         j === i
@@ -126,10 +185,23 @@ function Sheet() {
       const d20 = 1 + Math.floor(Math.random() * 20);
       const passed = d20 >= s.rank && s.rank < rankCap;
       results.push(`${s.name} ${d20}${passed ? "✓" : "✗"}`);
+      if (passed) notify("crawler", `Skill level up! ${s.name} is now Rank ${s.rank + 1}.`);
       return { ...s, rank: passed ? s.rank + 1 : s.rank, marked: false };
     });
     setRollLog(results.length ? `Advancement: ${results.join(" · ")}` : "No eligible marked skills.");
     persist({ skills });
+  }
+
+  /** Spend mana on a spell (Heal also restores slots). Shared by the list and the Hotlist. */
+  function castSpell(sp: SpellRow) {
+    if (!c || c.current_mana < sp.mana) return;
+    persist({
+      current_mana: Math.max(0, c.current_mana - sp.mana),
+      ...(sp.name === "Heal"
+        ? { current_hb_slots: Math.min(10, c.current_hb_slots + REST_RULES.healSpellSlots) }
+        : {}),
+    });
+    notify("crawler", `Cast ${sp.name} (−${sp.mana} Mana).`);
   }
 
   function shortRest() {
@@ -149,11 +221,37 @@ function Sheet() {
     });
   }
 
+  const collapseRemaining = activeFloor
+    ? hoursRemaining(activeFloor.collapse_days, activeFloor.hours_elapsed)
+    : null;
+  const hotlisted = c.spells.filter((s) => s.hotlist);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 pt-12">
+      {/* HUD chrome (book default layout: notifications ↖, bars ↗, hotlist ↓, minimap ↘).
+          Elements the GM has switched off simply vanish, like the AI took them. */}
+      {!hudHidden.includes("notifications") && <NotificationsHud items={notifications} />}
+      {!hudHidden.includes("bars") && (
+        <HudBars
+          hbSlots={c.current_hb_slots}
+          slotValue={hbSlotValue}
+          mana={c.current_mana}
+          maxMana={maxMana}
+          collapseLabel={collapseRemaining != null ? formatDungeonTime(collapseRemaining) : null}
+          collapseUrgent={collapseRemaining != null && collapseRemaining <= DUNGEON_DAY_HOURS}
+        />
+      )}
+      {!hudHidden.includes("hotlist") && (
+        <Hotlist spells={hotlisted} mana={c.current_mana} onCast={castSpell} />
+      )}
+      {!hudHidden.includes("minimap") && (
+        <Minimap floor={c.floor} label={campaigns.find((cp) => cp.id === c.campaign_id)?.name ?? null} />
+      )}
+      {overlay && <SystemOverlay send={overlay} onDismiss={() => setOverlay(null)} />}
+
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">{c.name}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-wide">{c.name}</h1>
           <p className="text-sm text-zinc-400">
             Level {c.level} · Floor {c.floor} ·{" "}
             {[c.race, c.class].filter(Boolean).join(" ") || "no race/class yet (Floor 3 unlock)"}
@@ -391,7 +489,10 @@ function Sheet() {
           </span>
           {grindLevelReady(c.grind?.total ?? 0, c.level) && (
             <button
-              onClick={() => persist({ level: c.level + 1, grind: { today: c.grind?.today ?? 0, total: 0 } })}
+              onClick={() => {
+                persist({ level: c.level + 1, grind: { today: c.grind?.today ?? 0, total: 0 } });
+                notify("crawler", `LEVEL UP! You are now level ${c.level + 1}.`);
+              }}
               className="rounded bg-amber-500 px-2 py-1 font-semibold text-zinc-950 hover:bg-amber-400"
             >
               ⬆ Level up from grinding (+1, reset total)
@@ -486,7 +587,7 @@ function Sheet() {
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           Attack spells roll d20 + Rank + INT Mod vs. Evade and add INT to damage. Must be in the
-          Hotlist to cast in combat; can&apos;t be used untrained.
+          Hotlist (★) to cast in combat; can&apos;t be used untrained.
         </p>
         <ul className="space-y-1 text-sm">
           {c.spells.map((sp, i) => {
@@ -515,15 +616,18 @@ function Sheet() {
                     <span className="font-mono text-xs text-emerald-400">d20 +{sp.rank + mods.int}</span>
                   )}
                   <button
+                    onClick={() => {
+                      if (!sp.hotlist && hotlisted.length >= 10) return;
+                      persist({ spells: c.spells.map((s, j) => (j === i ? { ...s, hotlist: !s.hotlist } : s)) });
+                    }}
+                    className={`text-sm ${sp.hotlist ? "text-amber-400" : "text-zinc-600 hover:text-amber-400"}`}
+                    title={sp.hotlist ? "Remove from Hotlist" : hotlisted.length >= 10 ? "Hotlist full (10 slots)" : "Pin to Hotlist (required to cast in combat)"}
+                  >
+                    {sp.hotlist ? "★" : "☆"}
+                  </button>
+                  <button
                     disabled={!affordable}
-                    onClick={() =>
-                      persist({
-                        current_mana: Math.max(0, c.current_mana - sp.mana),
-                        ...(sp.name === "Heal"
-                          ? { current_hb_slots: Math.min(10, c.current_hb_slots + REST_RULES.healSpellSlots) }
-                          : {}),
-                      })
-                    }
+                    onClick={() => castSpell(sp)}
                     className="rounded bg-indigo-700 px-2 py-0.5 text-xs font-semibold hover:bg-indigo-600 disabled:opacity-40"
                     title={affordable ? `Spend ${sp.mana} Mana` : "Not enough Mana"}
                   >
