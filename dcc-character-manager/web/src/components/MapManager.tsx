@@ -3,33 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { assetUrl } from "@/lib/upload";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
-import { MapStage } from "./MapStage";
+import { MapTokensPanel } from "./Tokens";
 import type { AssetRow, Campaign, MapGrid, MapRow } from "@/lib/types";
 
 export const DEFAULT_GRID: MapGrid = { ftPerSquare: 5, pxPerSquare: 100, offsetX: 0, offsetY: 0, show: true };
-
-/** Live grid-calibration preview: the real pan/zoom stage, GM's-eye view. */
-function MapPreview({ map, asset }: { map: MapRow; asset: AssetRow | undefined }) {
-  if (!asset) {
-    return (
-      <div className="flex h-40 w-full items-center justify-center rounded border border-zinc-800 bg-zinc-950 text-xs text-zinc-600">
-        Background image missing (asset deleted?)
-      </div>
-    );
-  }
-  return (
-    <MapStage
-      imageUrl={assetUrl(asset.storage_path)}
-      width={asset.width}
-      height={asset.height}
-      grid={map.grid}
-      className="h-80 w-full rounded border border-zinc-800"
-    />
-  );
-}
 
 function GridEditor({ map, onPatch }: { map: MapRow; onPatch: (patch: Partial<MapRow>) => void }) {
   const g = map.grid;
@@ -105,6 +84,7 @@ export function MapManager({
   const { user } = useUser();
   const [maps, setMaps] = useState<MapRow[]>([]);
   const [assets, setAssets] = useState<Record<string, AssetRow>>({});
+  const [party, setParty] = useState<{ id: string; name: string }[]>([]);
   const [picker, setPicker] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -113,13 +93,15 @@ export function MapManager({
     let cancelled = false;
     (async () => {
       const sb = supabase();
-      const [{ data: mapRows }, { data: assetRows }] = await Promise.all([
+      const [{ data: mapRows }, { data: assetRows }, { data: partyRows }] = await Promise.all([
         sb.from("maps").select("*").eq("campaign_id", campaign.id).order("created_at"),
         sb.from("assets").select("*").eq("campaign_id", campaign.id),
+        sb.from("characters").select("id,name").eq("campaign_id", campaign.id),
       ]);
       if (cancelled) return;
       setMaps((mapRows as MapRow[]) ?? []);
       setAssets(Object.fromEntries(((assetRows as AssetRow[]) ?? []).map((a) => [a.id, a])));
+      setParty((partyRows as { id: string; name: string }[]) ?? []);
     })();
     return () => {
       cancelled = true;
@@ -246,7 +228,7 @@ export function MapManager({
               {openId === m.id && (
                 <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
                   <GridEditor map={m} onPatch={(patch) => patchMap(m.id, patch)} />
-                  <MapPreview map={m} asset={asset} />
+                  <MapTokensPanel map={m} backgroundAsset={asset} assets={assets} party={party} />
                 </div>
               )}
             </li>

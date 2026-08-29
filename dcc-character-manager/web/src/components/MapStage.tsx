@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { assetUrl } from "@/lib/upload";
+import { createContext, useCallback, useEffect, useId, useRef, useState } from "react";
 import { fitTransform, pan, zoomAt, type StageTransform } from "@/lib/stage";
-import type { AssetRow, MapGrid, MapRow } from "@/lib/types";
+import type { MapGrid } from "@/lib/types";
 
 const ZOOM_BTN =
   "h-7 w-7 rounded border border-zinc-700 bg-zinc-950/80 text-sm text-zinc-300 hover:border-amber-600 hover:text-amber-300";
+
+/** Current stage transform, for layers that convert pointer deltas to map
+ * coordinates (token drags, drawing). Provided inside the transformed group. */
+export const StageTransformContext = createContext<StageTransform | null>(null);
 
 /** SVG grid lines for a map background — used by the GM preview and the stage. */
 export function MapGridLines({ grid, width, height, idSuffix }: { grid: MapGrid; width: number; height: number; idSuffix: string }) {
@@ -173,7 +175,7 @@ export function MapStage({
               <rect width={width || 100} height={height || 100} fill="#18181b" />
             )}
             <MapGridLines grid={grid} width={width} height={height} idSuffix={uid} />
-            {children}
+            <StageTransformContext.Provider value={t}>{children}</StageTransformContext.Provider>
           </g>
         )}
       </svg>
@@ -186,65 +188,5 @@ export function MapStage({
   );
 }
 
-/**
- * Player center-stage view of the campaign's active map: fetches the map row
- * (+ its background asset) and renders the pan/zoom stage in the Area-feed
- * slot. Members can read maps via RLS; the GM flipping the active map is
- * heard over `map_state` by the sheet, which just swaps `mapId` here.
- */
-export function ActiveMapStage({ mapId }: { mapId: string }) {
-  // Keyed remount resets the fetch state whenever the GM switches maps.
-  return <ActiveMapStageInner key={mapId} mapId={mapId} />;
-}
-
-function ActiveMapStageInner({ mapId }: { mapId: string }) {
-  const [map, setMap] = useState<MapRow | null>(null);
-  const [asset, setAsset] = useState<AssetRow | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: mapRow } = await supabase().from("maps").select("*").eq("id", mapId).maybeSingle();
-      if (cancelled) return;
-      if (!mapRow) {
-        setFailed(true);
-        return;
-      }
-      const m = mapRow as MapRow;
-      setMap(m);
-      if (m.asset_id) {
-        const { data: assetRow } = await supabase().from("assets").select("*").eq("id", m.asset_id).maybeSingle();
-        if (!cancelled) setAsset((assetRow as AssetRow) ?? null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [mapId]);
-
-  return (
-    <section className="overflow-hidden rounded-lg border border-emerald-900 bg-zinc-950">
-      <div className="flex items-baseline gap-2 border-b border-emerald-900/50 px-3 py-1">
-        <span className="font-display text-[10px] tracking-[0.3em] text-emerald-400">▚ TACTICAL MAP ▞</span>
-        {map && <span className="truncate text-[10px] text-zinc-500">{map.name}</span>}
-        <span className="ml-auto text-[9px] text-zinc-600">drag to pan · scroll to zoom</span>
-      </div>
-      {failed ? (
-        <p className="px-3 py-6 text-center text-xs text-zinc-600">
-          Map feed unavailable — it may have been deleted, or you are not in this campaign.
-        </p>
-      ) : map ? (
-        <MapStage
-          imageUrl={asset ? assetUrl(asset.storage_path) : null}
-          width={asset?.width ?? 1000}
-          height={asset?.height ?? 1000}
-          grid={map.grid}
-          className="h-[65vh] w-full"
-        />
-      ) : (
-        <p className="px-3 py-6 text-center text-xs text-zinc-600">Establishing map feed…</p>
-      )}
-    </section>
-  );
-}
+// ActiveMapStage (the player center-stage view) lives in Tokens.tsx — it
+// composes this stage with the token layer.

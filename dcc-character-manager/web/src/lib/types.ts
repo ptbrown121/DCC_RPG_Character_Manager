@@ -204,6 +204,25 @@ export interface MapRow {
   created_at: string;
 }
 
+/** A piece on the tabletop (migration 0011), in map (image-pixel) coordinates. */
+export interface TokenRow {
+  id: string;
+  map_id: string;
+  owner_id: string;
+  name: string;
+  asset_id: string | null;
+  x: number;
+  y: number;
+  /** Footprint in grid squares (1 = one square; bosses go bigger). */
+  size_squares: number;
+  /** GM-prep layer: hidden tokens never reach player clients (RLS-enforced). */
+  hidden: boolean;
+  /** Linked crawler — that player may drag this token (move_token RPC). */
+  character_id: string | null;
+  z: number;
+  created_at: string;
+}
+
 /** A player account that joined a campaign via join code (migration 0008). */
 export interface CampaignMember {
   campaign_id: string;

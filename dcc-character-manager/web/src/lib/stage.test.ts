@@ -5,6 +5,7 @@ import {
   mapToScreen,
   pan,
   screenToMap,
+  snapHalf,
   zoomAt,
   ZOOM_IN_LIMIT,
   ZOOM_OUT_LIMIT,
@@ -55,6 +56,15 @@ describe("coordinate round-trips", () => {
     const [mx, my] = screenToMap(t, sx, sy);
     expect(mx).toBeCloseTo(640);
     expect(my).toBeCloseTo(480);
+  });
+
+  it("snapHalf snaps to half-square steps around the grid offset", () => {
+    // 100px squares offset by 10 → half-square lattice at 10, 60, 110, …
+    expect(snapHalf(112, 10, 100)).toBe(110);
+    expect(snapHalf(140, 10, 100)).toBe(160);
+    expect(snapHalf(10, 10, 100)).toBe(10);
+    expect(snapHalf(-30, 10, 100)).toBe(-40);
+    expect(snapHalf(123, 0, 0)).toBe(123); // degenerate grid: no snap
   });
 
   it("pan shifts screen positions, not map positions", () => {

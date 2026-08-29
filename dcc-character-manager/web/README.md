@@ -54,7 +54,16 @@ truth for any rules question; code comments cite them by section/table.
   anchored on the cursor, double-click/⤢ to refit; math in `src/lib/stage.ts`,
   vitest-covered). Player sheets show `ActiveMapStage` center-stage whenever the
   campaign has an active map — the image Area feed is the fallback — swapping
-  live on `map_state` and reading the row on load). All additive. RLS baseline is owner-only
+  live on `map_state` and reading the row on load. 0011 adds `tokens`
+  (per-map pieces in image-pixel coords, sized in grid squares): the GM has
+  full control from the map editor in MapManager (place from the asset
+  library, resize, hide — hidden tokens are a GM-prep layer RLS never shows
+  to players — link to a crawler, z-order); a player drags only the token
+  linked to their crawler, persisted position-only through the `move_token`
+  SECURITY DEFINER RPC. Live sync rides broadcast channel `map:<mapId>`
+  (`token_move` throttled during drags, `token_upsert`/`token_remove` for
+  lifecycle — see `Tokens.tsx`; snap-to-grid at half-square granularity).
+  All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
   header) and members get read access to the campaign row (incl. scene), floors, areas,

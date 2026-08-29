@@ -45,3 +45,10 @@ export function screenToMap(t: StageTransform, sx: number, sy: number): [number,
 export function mapToScreen(t: StageTransform, mx: number, my: number): [number, number] {
   return [mx * t.k + t.x, my * t.k + t.y];
 }
+
+/** Snap a map coordinate to the nearest half-square of the grid. */
+export function snapHalf(v: number, offset: number, pxPerSquare: number): number {
+  if (pxPerSquare <= 0) return v;
+  const step = pxPerSquare / 2;
+  return offset + Math.round((v - offset) / step) * step;
+}

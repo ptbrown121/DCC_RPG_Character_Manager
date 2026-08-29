@@ -47,7 +47,7 @@ import {
   type HudNotification,
   type SystemSend,
 } from "@/components/Hud";
-import { ActiveMapStage } from "@/components/MapStage";
+import { ActiveMapStage } from "@/components/Tokens";
 import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -364,7 +364,7 @@ function Sheet() {
         const campaign = campaigns.find((cp) => cp.id === c.campaign_id);
         const activeMapId = liveMapId !== undefined ? liveMapId : (campaign?.active_map_id ?? null);
         return activeMapId ? (
-          <ActiveMapStage mapId={activeMapId} />
+          <ActiveMapStage mapId={activeMapId} characterId={c.id} />
         ) : (
           <SceneStage scene={liveScene ?? campaign?.scene ?? null} />
         );
