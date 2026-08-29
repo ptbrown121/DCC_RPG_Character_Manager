@@ -503,6 +503,8 @@ export function useSystemSends(
     onSend: (send: SystemSend) => void;
     onConfig: (config: HudConfig) => void;
     onScene: (scene: SceneState) => void;
+    /** GM switched the active tabletop map (null = hidden again). */
+    onMapState?: (state: { activeMapId: string | null }) => void;
   },
 ) {
   const cb = useRef(handlers);
@@ -519,6 +521,9 @@ export function useSystemSends(
       ch.on("broadcast", { event: "system_send" }, ({ payload }) => cb.current.onSend(payload as SystemSend))
         .on("broadcast", { event: "hud_config" }, ({ payload }) => cb.current.onConfig(payload as HudConfig))
         .on("broadcast", { event: "scene" }, ({ payload }) => cb.current.onScene(payload as SceneState))
+        .on("broadcast", { event: "map_state" }, ({ payload }) =>
+          cb.current.onMapState?.(payload as { activeMapId: string | null }),
+        )
         .subscribe();
     }
     return () => {

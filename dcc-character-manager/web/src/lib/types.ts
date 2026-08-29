@@ -152,6 +152,8 @@ export interface Campaign {
   scene?: SceneState | null;
   /** Shareable invite code. Optional until migration 0008 has been run. */
   join_code?: string;
+  /** Map shown on party sheets. Optional until migration 0010 has been run. */
+  active_map_id?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -170,6 +172,35 @@ export interface AssetRow {
   storage_path: string;
   width: number;
   height: number;
+  created_at: string;
+}
+
+/** Grid calibration for a map. Feet are the game unit; px are image pixels. */
+export interface MapGrid {
+  ftPerSquare: number;
+  pxPerSquare: number;
+  offsetX: number;
+  offsetY: number;
+  show: boolean;
+}
+
+/** One GM freehand stroke on a map, in map (image-pixel) coordinates. */
+export interface DrawingStroke {
+  id: string;
+  color: string;
+  width: number;
+  points: [number, number][];
+}
+
+/** A tabletop map (migration 0010): asset background + grid + GM drawings. */
+export interface MapRow {
+  id: string;
+  campaign_id: string;
+  owner_id: string;
+  name: string;
+  asset_id: string | null;
+  grid: MapGrid;
+  drawings: DrawingStroke[];
   created_at: string;
 }
 

@@ -105,7 +105,15 @@ export function AssetLibrary({ campaignId }: { campaignId: string }) {
   }
 
   async function remove(asset: AssetRow) {
-    if (!window.confirm(`Delete “${asset.name}”? The image is removed from storage too.`)) return;
+    // Warn if any map uses this image as its background (the map would go blank).
+    const { count } = await supabase()
+      .from("maps")
+      .select("id", { count: "exact", head: true })
+      .eq("asset_id", asset.id);
+    const inUse = count
+      ? ` ⚠ ${count} map${count === 1 ? "" : "s"} use${count === 1 ? "s" : ""} this image as a background and will go blank.`
+      : "";
+    if (!window.confirm(`Delete “${asset.name}”? The image is removed from storage too.${inUse}`)) return;
     try {
       await deleteAsset(asset);
       setAssets((prev) => prev.filter((a) => a.id !== asset.id));

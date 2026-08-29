@@ -19,6 +19,7 @@ import { statMod } from "@/lib/rules";
 import VehiclesPanel from "@/components/VehiclesPanel";
 import { GmSendPanel } from "@/components/Hud";
 import { AssetLibrary } from "@/components/AssetLibrary";
+import { MapManager } from "@/components/MapManager";
 import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, CampaignMember, Character, Encounter } from "@/lib/types";
 
 /** Client-generated 6-char invite code (collision odds are cosmic; column is unique anyway). */
@@ -364,6 +365,9 @@ function CampaignPage() {
 
       {/* Uploaded images: maps, tokens, item icons (GM manages; members see via pickers) */}
       {isGm && <AssetLibrary campaignId={id} />}
+
+      {/* Tabletop maps: create from an asset, calibrate the grid, set active for the party */}
+      {isGm && <MapManager campaign={campaign} onPatchCampaign={patchCampaign} />}
 
       <section className="space-y-3">
         {floors.map((f) => (

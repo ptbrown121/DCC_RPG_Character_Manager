@@ -44,8 +44,12 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0009, in order (0009 also creates the `assets`
-  storage bucket + its `storage.objects` policies via SQL — no dashboard steps). All additive. RLS baseline is owner-only
+- `supabase/migrations/` — 0001–0010, in order (0009 also creates the `assets`
+  storage bucket + its `storage.objects` policies via SQL — no dashboard steps;
+  0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
+  drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
+  GM manages maps in `MapManager.tsx` on the campaign page; switching the active
+  map broadcasts `map_state` on the campaign channel). All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
   header) and members get read access to the campaign row (incl. scene), floors, areas,
@@ -67,7 +71,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0009` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0010` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`
