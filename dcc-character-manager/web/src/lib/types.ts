@@ -150,9 +150,20 @@ export interface Campaign {
   vehicles: VehicleEntry[];
   /** Optional until migration 0007 has been run. */
   scene?: SceneState | null;
+  /** Shareable invite code. Optional until migration 0008 has been run. */
+  join_code?: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A player account that joined a campaign via join code (migration 0008). */
+export interface CampaignMember {
+  campaign_id: string;
+  user_id: string;
+  /** Email captured at join time; null for pre-capture rows. */
+  display: string | null;
+  created_at: string;
 }
 
 export interface CampaignFloor {

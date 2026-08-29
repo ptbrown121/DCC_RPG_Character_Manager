@@ -18,7 +18,17 @@ import {
 import { statMod } from "@/lib/rules";
 import VehiclesPanel from "@/components/VehiclesPanel";
 import { GmSendPanel } from "@/components/Hud";
-import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, Character, Encounter } from "@/lib/types";
+import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, CampaignMember, Character, Encounter } from "@/lib/types";
+
+/** Client-generated 6-char invite code (collision odds are cosmic; column is unique anyway). */
+function newJoinCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 6)
+    .toUpperCase();
+}
 
 const FLOOR_STATUS_COLORS: Record<CampaignFloor["status"], string> = {
   upcoming: "text-zinc-500",
@@ -166,7 +176,9 @@ function CampaignPage() {
   const [floors, setFloors] = useState<CampaignFloor[]>([]);
   const [areas, setAreas] = useState<CampaignArea[]>([]);
   const [party, setParty] = useState<Character[]>([]);
+  const [members, setMembers] = useState<CampaignMember[]>([]);
   const [encounters, setEncounters] = useState<Encounter[]>([]);
+  const [copied, setCopied] = useState(false);
   const [achName, setAchName] = useState("");
   const [achReward, setAchReward] = useState("");
   const [achBy, setAchBy] = useState("");
@@ -178,6 +190,7 @@ function CampaignPage() {
     sb.from("campaign_floors").select("*").eq("campaign_id", id).order("floor_number").then(({ data }) => setFloors((data as CampaignFloor[]) ?? []));
     sb.from("campaign_areas").select("*").eq("campaign_id", id).order("sort").then(({ data }) => setAreas((data as CampaignArea[]) ?? []));
     sb.from("characters").select("*").eq("campaign_id", id).then(({ data }) => setParty((data as Character[]) ?? []));
+    sb.from("campaign_members").select("*").eq("campaign_id", id).order("created_at").then(({ data }) => setMembers((data as CampaignMember[]) ?? []));
     sb.from("encounters").select("*").eq("campaign_id", id).order("updated_at", { ascending: false }).then(({ data }) => setEncounters((data as Encounter[]) ?? []));
   }, [id]);
 
@@ -211,7 +224,27 @@ function CampaignPage() {
     [id, user, areas],
   );
 
+  const kickMember = useCallback(
+    async (memberId: string) => {
+      const { error } = await supabase().rpc("kick_member", { cid: id, member: memberId });
+      if (error) return;
+      setMembers((rows) => rows.filter((m) => m.user_id !== memberId));
+      setParty((rows) => rows.filter((ch) => ch.owner_id !== memberId));
+    },
+    [id],
+  );
+
   if (!campaign) return <p className="text-zinc-400">Loading…</p>;
+
+  const isGm = !!user && campaign.owner_id === user.id;
+
+  function copyJoinCode() {
+    if (!campaign?.join_code) return;
+    navigator.clipboard.writeText(campaign.join_code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
 
   function addAchievement() {
     if (!achName.trim() || !campaign) return;
@@ -239,9 +272,42 @@ function CampaignPage() {
         </p>
       </header>
 
+      {!isGm && (
+        <p className="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
+          You&apos;re viewing this campaign as a party member — read-only.
+        </p>
+      )}
+
       {/* Party */}
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-        <h2 className="mb-2 font-semibold">Party ({party.length})</h2>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h2 className="font-semibold">Party ({party.length})</h2>
+          {isGm && campaign.join_code && (
+            <span className="ml-auto flex items-center gap-1 text-xs">
+              <span className="text-zinc-500">JOIN CODE</span>
+              <code className="rounded border border-amber-900/60 bg-zinc-950 px-2 py-0.5 font-mono tracking-widest text-amber-300">
+                {campaign.join_code}
+              </code>
+              <button
+                onClick={copyJoinCode}
+                className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                title="Copy join code"
+              >
+                {copied ? "✓" : "copy"}
+              </button>
+              <button
+                onClick={() => patchCampaign({ join_code: newJoinCode() })}
+                className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-700"
+                title="Invalidate this code and issue a new one"
+              >
+                ↻
+              </button>
+            </span>
+          )}
+          {isGm && !campaign.join_code && (
+            <span className="ml-auto text-xs text-zinc-600">Run migration 0008 to enable join codes.</span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {party.map((ch) => {
             const conMod = statMod(ch.stats.enhanced.con);
@@ -258,19 +324,42 @@ function CampaignPage() {
           })}
           {party.length === 0 && (
             <span className="text-xs text-zinc-500">
-              No crawlers assigned — set the Campaign field on a character sheet.
+              No crawlers yet — share the join code, or set the Campaign field on a character sheet.
             </span>
           )}
         </div>
+        {isGm && members.length > 0 && (
+          <ul className="mt-3 space-y-1 border-t border-zinc-800 pt-2 text-xs">
+            {members.map((m) => (
+              <li key={m.user_id} className="flex items-center justify-between text-zinc-400">
+                <span>
+                  👤 {m.display ?? `${m.user_id.slice(0, 8)}…`}
+                  <span className="ml-2 text-zinc-600">
+                    {party.filter((ch) => ch.owner_id === m.user_id).map((ch) => ch.name).join(", ") || "no crawler linked"}
+                  </span>
+                </span>
+                <button
+                  onClick={() => kickMember(m.user_id)}
+                  className="text-zinc-600 hover:text-red-400"
+                  title="Remove from campaign (unlinks their crawlers)"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* System sends to player HUDs (party-wide or private), Area feed, HUD element control */}
-      <GmSendPanel
-        campaignId={id}
-        party={party.map((p) => ({ id: p.id, name: p.name }))}
-        scene={campaign.scene ?? null}
-        onSceneChange={(scene) => patchCampaign({ scene })}
-      />
+      {isGm && (
+        <GmSendPanel
+          campaignId={id}
+          party={party.map((p) => ({ id: p.id, name: p.name }))}
+          scene={campaign.scene ?? null}
+          onSceneChange={(scene) => patchCampaign({ scene })}
+        />
+      )}
 
       <section className="space-y-3">
         {floors.map((f) => (

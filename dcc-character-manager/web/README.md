@@ -37,9 +37,15 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0007, in order. All additive; RLS is owner-only
-  (`auth.uid() = owner_id`) on every table. New schema = new numbered migration; the user
-  runs them by pasting into the Supabase SQL editor.
+- `supabase/migrations/` — 0001–0008, in order. All additive. RLS baseline is owner-only
+  (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
+  join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
+  header) and members get read access to the campaign row (incl. scene), floors, areas,
+  and the party's characters, while the GM gets read access to members' linked characters
+  (+ `kick_member` RPC that also unlinks their crawlers). Policies cross the
+  campaigns ⇄ members tables via SECURITY DEFINER helpers (`is_campaign_member`,
+  `owns_campaign`) to avoid RLS recursion. All writes stay owner-only. New schema = new
+  numbered migration; the user runs them by pasting into the Supabase SQL editor.
 
 ## Conventions
 
@@ -53,7 +59,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0006` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0008` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`
