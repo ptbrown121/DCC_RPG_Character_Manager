@@ -7,7 +7,28 @@ export interface SkillRow {
   check_type: "opposed" | "unopposed" | "passive" | "evade";
   rank: number;
   marked: boolean;
+  /** Grind hours accrued toward this skill's next advancement check. */
+  grind?: number;
   notes?: string;
+}
+
+export interface GrindState {
+  total: number;
+  today: number;
+}
+
+export interface SponsorEntry {
+  name: string;
+  floor: number;
+  notes: string;
+}
+
+export interface SocialState {
+  popularity?: number;
+  top_ten?: number | null;
+  bounty?: string;
+  sponsors?: SponsorEntry[];
+  deity?: { name: string; tier: "acolyte" | "devotee" | "zealot"; streak: number; lapse: string };
 }
 
 export interface SpellRow {
@@ -64,6 +85,9 @@ export interface Character {
   spells: SpellRow[];
   debuffs: DebuffRow[];
   traits: Traits;
+  campaign_id: string | null;
+  grind: GrindState;
+  social: SocialState;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -140,6 +164,8 @@ export interface Encounter {
   strength: "weak" | "moderate" | "strong" | "overwhelming";
   round: number;
   status: "planning" | "running" | "done";
+  campaign_id: string | null;
+  area_id: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

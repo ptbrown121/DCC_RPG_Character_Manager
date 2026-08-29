@@ -2,11 +2,27 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import AuthGate from "@/components/AuthGate";
+import { useParams, useRouter } from "next/navigation";
+import AuthGate, { useUser } from "@/components/AuthGate";
 import { supabase } from "@/lib/supabase";
-import { AREA_SECTIONS, AREA_PHASES, BOSS_TIERS, BOSS_TIER_LABELS, NPC_KINDS, type BossTier } from "@/lib/rules";
-import type { BossEntry, CampaignArea, NpcEntry } from "@/lib/types";
+import {
+  AREA_SECTIONS,
+  AREA_PHASES,
+  BOSS_TIERS,
+  BOSS_TIER_LABELS,
+  NPC_KINDS,
+  bossHbSlots,
+  statBudget,
+  statMod,
+  damageDiceForLevel,
+  mobDr,
+  mobMove,
+  emptyScores,
+  STAT_KEYS,
+  type BossTier,
+  type StatScores,
+} from "@/lib/rules";
+import type { BossEntry, CampaignArea, Character, NpcEntry } from "@/lib/types";
 
 function emptyBoss(): BossEntry {
   return { name: "", level: 30, tier: "neighborhood", clues: "", phases: "", defeated: false };
@@ -16,19 +32,123 @@ function emptyNpc(): NpcEntry {
   return { name: "", title: "", level: null, kind: "ai-card", notes: "" };
 }
 
+/** Spread a boss's stat budget evenly across the five scores (GM can tweak in the runner). */
+function evenBossStats(level: number, tier: BossTier): StatScores {
+  const { total } = statBudget(level, tier);
+  const per = Math.floor(total / 5);
+  const rem = total - per * 5;
+  const scores = emptyScores(per);
+  STAT_KEYS.slice(0, rem).forEach((k) => (scores[k] = per + 1));
+  return scores;
+}
+
 function AreaEditor() {
   const { id, areaId } = useParams<{ id: string; areaId: string }>();
+  const router = useRouter();
+  const { user } = useUser();
   const [area, setArea] = useState<CampaignArea | null>(null);
+  const [floorNumber, setFloorNumber] = useState<number>(1);
+  const [party, setParty] = useState<Character[]>([]);
+  const [launching, setLaunching] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
-    supabase()
-      .from("campaign_areas")
+    const sb = supabase();
+    sb.from("campaign_areas")
       .select("*")
       .eq("id", areaId)
       .single()
-      .then(({ data }) => setArea(data as CampaignArea));
-  }, [areaId]);
+      .then(async ({ data }) => {
+        const a = data as CampaignArea;
+        setArea(a);
+        if (a) {
+          const { data: floor } = await sb
+            .from("campaign_floors")
+            .select("floor_number")
+            .eq("id", a.floor_id)
+            .single();
+          if (floor) setFloorNumber(floor.floor_number);
+        }
+      });
+    sb.from("characters").select("*").eq("campaign_id", id).then(({ data }) => setParty((data as Character[]) ?? []));
+  }, [areaId, id]);
+
+  async function runBossEncounter(boss: BossEntry) {
+    if (!user || !area || launching) return;
+    setLaunching(true);
+    const sb = supabase();
+    const tier = (boss.tier || "neighborhood") as BossTier;
+    const { data: enc, error } = await sb
+      .from("encounters")
+      .insert({
+        owner_id: user.id,
+        name: `${area.name} — ${boss.name || "Boss"}`,
+        floor: floorNumber,
+        party_size: Math.max(2, party.length || 4),
+        strength: "strong",
+        campaign_id: id,
+        area_id: area.id,
+        notes: [boss.clues && `Clues: ${boss.clues}`, boss.phases && `Phases: ${boss.phases}`]
+          .filter(Boolean)
+          .join("\n"),
+      })
+      .select("id")
+      .single();
+    if (error || !enc) {
+      setLaunching(false);
+      return;
+    }
+    const stats = evenBossStats(boss.level, tier);
+    const slots = bossHbSlots(tier, floorNumber);
+    const rows: Record<string, unknown>[] = [
+      {
+        encounter_id: enc.id,
+        owner_id: user.id,
+        kind: "boss",
+        name: boss.name || "Boss",
+        level: boss.level,
+        size: 4,
+        boss_tier: tier,
+        is_elite: true,
+        stats,
+        hb_slots: slots,
+        slot_value: Math.max(1, statMod(stats.con)),
+        current_slots: slots,
+        dr: mobDr(floorNumber),
+        move_ft: mobMove(4),
+        attacks: [
+          {
+            name: "Attack",
+            dice: damageDiceForLevel(boss.level),
+            die: 6,
+            bonus: statMod(stats.str),
+            damage_type: "Bludgeoning",
+          },
+        ],
+        abilities: boss.phases || null,
+        sort: 0,
+      },
+      ...party.map((ch, i) => ({
+        encounter_id: enc.id,
+        owner_id: user.id,
+        kind: "crawler",
+        name: ch.name,
+        level: ch.level,
+        size: 4,
+        character_id: ch.id,
+        stats: ch.stats.enhanced,
+        hb_slots: 10,
+        slot_value: Math.max(1, statMod(ch.stats.enhanced.con)),
+        current_slots: ch.current_hb_slots,
+        dr: 0,
+        move_ft: ch.move_ft,
+        attacks: [],
+        sort: i + 1,
+      })),
+    ];
+    await sb.from("encounter_combatants").insert(rows);
+    router.push(`/encounters/${enc.id}`);
+  }
 
   const persist = useCallback(async (patch: Partial<CampaignArea>) => {
     setArea((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -102,7 +222,15 @@ function AreaEditor() {
                     <option key={t} value={t}>{BOSS_TIER_LABELS[t as BossTier]} (+{["neighborhood", "borough", "city", "province", "country", "floor"].indexOf(t) + 1} levels)</option>
                   ))}
                 </select>
-                <label className="ml-auto flex items-center gap-1 text-xs text-zinc-400">
+                <button
+                  onClick={() => runBossEncounter(b)}
+                  disabled={launching || b.defeated}
+                  title={`Generates the boss via the GM formulas (even stat spread, HB from Table 50, damage from Table 51) and adds the ${party.length ? "party" : "party (none assigned yet)"}`}
+                  className="ml-auto rounded bg-red-700 px-2 py-1 text-xs font-semibold hover:bg-red-600 disabled:opacity-40"
+                >
+                  {launching ? "…" : "⚔ Run as encounter"}
+                </button>
+                <label className="flex items-center gap-1 text-xs text-zinc-400">
                   <input type="checkbox" checked={b.defeated} onChange={(e) => patchBoss(i, { defeated: e.target.checked })} />
                   defeated {b.defeated && "💀"}
                 </label>

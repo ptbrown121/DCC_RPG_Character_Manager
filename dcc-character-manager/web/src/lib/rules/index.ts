@@ -9,3 +9,4 @@ export * from "./catalog/spells";
 export * from "./catalog/raceclass";
 export * from "./catalog/raceclassData";
 export * from "./campaign";
+export * from "./social";

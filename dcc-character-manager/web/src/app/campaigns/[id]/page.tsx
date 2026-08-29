@@ -15,7 +15,8 @@ import {
   typicalMobLevels,
   typicalBossLevels,
 } from "@/lib/rules";
-import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor } from "@/lib/types";
+import { statMod } from "@/lib/rules";
+import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, Character, Encounter } from "@/lib/types";
 
 const FLOOR_STATUS_COLORS: Record<CampaignFloor["status"], string> = {
   upcoming: "text-zinc-500",
@@ -162,6 +163,8 @@ function CampaignPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [floors, setFloors] = useState<CampaignFloor[]>([]);
   const [areas, setAreas] = useState<CampaignArea[]>([]);
+  const [party, setParty] = useState<Character[]>([]);
+  const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [achName, setAchName] = useState("");
   const [achReward, setAchReward] = useState("");
   const [achBy, setAchBy] = useState("");
@@ -172,6 +175,8 @@ function CampaignPage() {
     sb.from("campaigns").select("*").eq("id", id).single().then(({ data }) => setCampaign(data as Campaign));
     sb.from("campaign_floors").select("*").eq("campaign_id", id).order("floor_number").then(({ data }) => setFloors((data as CampaignFloor[]) ?? []));
     sb.from("campaign_areas").select("*").eq("campaign_id", id).order("sort").then(({ data }) => setAreas((data as CampaignArea[]) ?? []));
+    sb.from("characters").select("*").eq("campaign_id", id).then(({ data }) => setParty((data as Character[]) ?? []));
+    sb.from("encounters").select("*").eq("campaign_id", id).order("updated_at", { ascending: false }).then(({ data }) => setEncounters((data as Encounter[]) ?? []));
   }, [id]);
 
   const patchFloor = useCallback(async (floorId: string, patch: Partial<CampaignFloor>) => {
@@ -232,6 +237,31 @@ function CampaignPage() {
         </p>
       </header>
 
+      {/* Party */}
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <h2 className="mb-2 font-semibold">Party ({party.length})</h2>
+        <div className="flex flex-wrap gap-2">
+          {party.map((ch) => {
+            const conMod = statMod(ch.stats.enhanced.con);
+            const low = ch.current_hb_slots <= 3;
+            return (
+              <Link
+                key={ch.id}
+                href={`/characters/${ch.id}`}
+                className={`rounded-full border px-3 py-1 text-sm hover:border-amber-500 ${low ? "border-red-800 text-red-300" : "border-zinc-700 text-zinc-200"}`}
+              >
+                {ch.name} <span className="text-xs text-zinc-500">Lv {ch.level} · HB {ch.current_hb_slots}/10 ({ch.current_hb_slots * conMod})</span>
+              </Link>
+            );
+          })}
+          {party.length === 0 && (
+            <span className="text-xs text-zinc-500">
+              No crawlers assigned — set the Campaign field on a character sheet.
+            </span>
+          )}
+        </div>
+      </section>
+
       <section className="space-y-3">
         {floors.map((f) => (
           <FloorCard
@@ -242,6 +272,26 @@ function CampaignPage() {
             onAddArea={addArea}
           />
         ))}
+      </section>
+
+      {/* Linked encounters */}
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <h2 className="mb-2 font-semibold">Encounters</h2>
+        <ul className="space-y-1 text-sm">
+          {encounters.map((e) => (
+            <li key={e.id}>
+              <Link href={`/encounters/${e.id}`} className="flex items-center justify-between rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 hover:border-amber-600">
+                <span>{e.name}</span>
+                <span className={`text-xs ${e.status === "running" ? "text-emerald-400" : e.status === "done" ? "text-zinc-500" : "text-amber-400"}`}>
+                  Floor {e.floor} · {e.status}{e.round > 0 ? ` · round ${e.round}` : ""}
+                </span>
+              </Link>
+            </li>
+          ))}
+          {encounters.length === 0 && (
+            <li className="text-xs text-zinc-500">None yet — use “Run as encounter” on a boss inside an area.</li>
+          )}
+        </ul>
       </section>
 
       {/* Achievements log */}

@@ -172,6 +172,11 @@ function Runner() {
         <div>
           <h1 className="text-2xl font-bold">{enc.name}</h1>
           <p className="text-sm text-zinc-400">
+            {enc.campaign_id && (
+              <Link href={enc.area_id ? `/campaigns/${enc.campaign_id}/areas/${enc.area_id}` : `/campaigns/${enc.campaign_id}`} className="text-amber-400 hover:underline">
+                ← {enc.area_id ? "area" : "campaign"}
+              </Link>
+            )}{" "}
             Floor {enc.floor} · party of {enc.party_size} · {living}/{mobs.length} adversaries standing
           </p>
         </div>

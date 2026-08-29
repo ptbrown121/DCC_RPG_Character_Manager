@@ -18,20 +18,28 @@ import {
   REST_RULES,
   DEBUFFS,
   roundDown,
+  RANK_CAP_EARLY,
+  RANK_CAP_ABSOLUTE,
+  SAFE_GRIND_HOURS_PER_DAY,
+  grindCheckReady,
+  grindLevelReady,
   type StatKey,
   type CatalogSkill,
   type CatalogSpell,
 } from "@/lib/rules";
 import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
 import RaceClassPanel from "@/components/RaceClassPanel";
-import type { Character, SkillRow, SpellRow } from "@/lib/types";
+import FameFaithPanel from "@/components/FameFaithPanel";
+import type { Campaign, Character, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
   const { id } = useParams<{ id: string }>();
   const [c, setC] = useState<Character | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [damageIn, setDamageIn] = useState("");
   const [drIn, setDrIn] = useState("0");
   const [debuffPick, setDebuffPick] = useState(DEBUFFS[0].name);
+  const [rollLog, setRollLog] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
@@ -41,6 +49,10 @@ function Sheet() {
       .eq("id", id)
       .single()
       .then(({ data }) => setC(data as Character));
+    supabase()
+      .from("campaigns")
+      .select("*")
+      .then(({ data }) => setCampaigns((data as Campaign[]) ?? []));
   }, [id]);
 
   const derived = useMemo(() => (c ? deriveFromEnhanced(c.stats.enhanced, c.move_ft) : null), [c]);
@@ -72,6 +84,51 @@ function Sheet() {
   function updateSkill(i: number, patch: Partial<SkillRow>) {
     if (!c) return;
     persist({ skills: c.skills.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+  }
+
+  const rankCap = c ? (c.floor >= 6 ? RANK_CAP_ABSOLUTE : RANK_CAP_EARLY) : RANK_CAP_EARLY;
+
+  /** +1 grind hour on a skill; also ticks the daily and lifetime totals. */
+  function grindHour(i: number) {
+    if (!c) return;
+    const grind = c.grind ?? { total: 0, today: 0 };
+    persist({
+      skills: c.skills.map((s, j) => (j === i ? { ...s, grind: (s.grind ?? 0) + 1 } : s)),
+      grind: { total: grind.total + 1, today: grind.today + 1 },
+    });
+  }
+
+  /** Advancement check for one skill: 1d20 ≥ current rank → +1 rank. Resets its grind hours. */
+  function rollAdvancement(i: number, viaGrind: boolean) {
+    if (!c) return;
+    const s = c.skills[i];
+    const d20 = 1 + Math.floor(Math.random() * 20);
+    const passed = d20 >= s.rank && s.rank < rankCap;
+    setRollLog(
+      `${s.name}: rolled ${d20} vs Rank ${s.rank} — ${passed ? `Rank up! Now ${s.rank + 1}` : s.rank >= rankCap ? `at the Rank ${rankCap} cap` : "no change"}`,
+    );
+    persist({
+      skills: c.skills.map((row, j) =>
+        j === i
+          ? { ...row, rank: passed ? row.rank + 1 : row.rank, marked: viaGrind ? row.marked : false, grind: viaGrind ? 0 : row.grind }
+          : row,
+      ),
+    });
+  }
+
+  /** Roll advancement for marked skills (2-hour block: rank ≤4 only; end of floor: all). */
+  function rollMarked(maxRank: number) {
+    if (!c) return;
+    const results: string[] = [];
+    const skills = c.skills.map((s) => {
+      if (!s.marked || s.rank > maxRank) return s;
+      const d20 = 1 + Math.floor(Math.random() * 20);
+      const passed = d20 >= s.rank && s.rank < rankCap;
+      results.push(`${s.name} ${d20}${passed ? "✓" : "✗"}`);
+      return { ...s, rank: passed ? s.rank + 1 : s.rank, marked: false };
+    });
+    setRollLog(results.length ? `Advancement: ${results.join(" · ")}` : "No eligible marked skills.");
+    persist({ skills });
   }
 
   function shortRest() {
@@ -308,8 +365,39 @@ function Sheet() {
         </div>
         <p className="mb-2 text-xs text-zinc-500">
           Any attempt marks a skill. Advancement: 1d20 ≥ current rank → +1 rank (rank ≤4 every 2 h
-          of play; rank ≥5 at end of floor). Rank cap 15 on Floors 1–5.
+          of play; rank ≥5 at end of floor). Rank cap {rankCap} on this floor.
         </p>
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+          <button onClick={() => rollMarked(4)} className="rounded bg-indigo-800 px-2 py-1 hover:bg-indigo-700" title="Roll advancement for marked skills of rank ≤4">
+            End 2-h block: roll marked (rank ≤4)
+          </button>
+          <button onClick={() => rollMarked(rankCap)} className="rounded bg-indigo-900 px-2 py-1 hover:bg-indigo-800" title="Roll advancement for all marked skills">
+            End of floor: roll all marked
+          </button>
+          <span className="text-zinc-500">
+            Grind today:{" "}
+            <b className={(c.grind?.today ?? 0) > SAFE_GRIND_HOURS_PER_DAY ? "text-red-400" : "text-zinc-200"}>
+              {c.grind?.today ?? 0}h
+            </b>
+            /{SAFE_GRIND_HOURS_PER_DAY} safe
+            {(c.grind?.today ?? 0) > SAFE_GRIND_HOURS_PER_DAY && " — Endurance Check per extra hour or it's wasted + Fatigued"}
+          </span>
+          <button onClick={() => persist({ grind: { ...(c.grind ?? { total: 0 }), today: 0, total: c.grind?.total ?? 0 } })} className="rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700">
+            New day
+          </button>
+          <span className="text-zinc-500">
+            Grind total: <b className="text-zinc-200">{c.grind?.total ?? 0}h</b>/{c.level} to level
+          </span>
+          {grindLevelReady(c.grind?.total ?? 0, c.level) && (
+            <button
+              onClick={() => persist({ level: c.level + 1, grind: { today: c.grind?.today ?? 0, total: 0 } })}
+              className="rounded bg-amber-500 px-2 py-1 font-semibold text-zinc-950 hover:bg-amber-400"
+            >
+              ⬆ Level up from grinding (+1, reset total)
+            </button>
+          )}
+        </div>
+        {rollLog && <p className="mb-2 rounded border border-indigo-900 bg-indigo-950/40 px-2 py-1 text-xs text-indigo-200">{rollLog}</p>}
         <table className="w-full text-left text-sm">
           <thead className="text-xs uppercase text-zinc-500">
             <tr>
@@ -318,6 +406,7 @@ function Sheet() {
               <th>Rank</th>
               <th>Check bonus</th>
               <th>Marked</th>
+              <th>Grind</th>
               <th></th>
             </tr>
           </thead>
@@ -345,6 +434,29 @@ function Sheet() {
                 </td>
                 <td>
                   <input type="checkbox" checked={s.marked} onChange={(e) => updateSkill(i, { marked: e.target.checked })} />
+                </td>
+                <td className="whitespace-nowrap">
+                  {s.rank >= 1 ? (
+                    grindCheckReady(s.grind ?? 0, s.rank) ? (
+                      <button
+                        onClick={() => rollAdvancement(i, true)}
+                        className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-950 hover:bg-amber-400"
+                        title={`${s.grind}h accrued (needs ${s.rank}) — roll the advancement check`}
+                      >
+                        ⬆ roll!
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => grindHour(i)}
+                        className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] hover:bg-zinc-700"
+                        title={`Accrue 1 grind hour (${s.grind ?? 0}/${s.rank} toward the next check)`}
+                      >
+                        {s.grind ?? 0}/{s.rank}h +
+                      </button>
+                    )
+                  ) : (
+                    <span className="text-[10px] text-zinc-700">—</span>
+                  )}
                 </td>
                 <td>
                   <button onClick={() => persist({ skills: c.skills.filter((_, j) => j !== i) })} className="text-zinc-600 hover:text-red-400">✕</button>
@@ -432,6 +544,9 @@ function Sheet() {
         </ul>
       </section>
 
+      {/* Fame & Faith */}
+      <FameFaithPanel character={c} onPatch={(patch) => persist(patch)} />
+
       {/* Wallet + notes */}
       <section className="grid gap-4 sm:grid-cols-3">
         {(
@@ -454,6 +569,19 @@ function Sheet() {
             </div>
           </div>
         ))}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm">
+          <div className="text-xs uppercase text-zinc-500">Campaign</div>
+          <select
+            value={c.campaign_id ?? ""}
+            onChange={(e) => persist({ campaign_id: e.target.value || null })}
+            className="mt-1 w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1"
+          >
+            <option value="">— none —</option>
+            {campaigns.map((cp) => (
+              <option key={cp.id} value={cp.id}>{cp.name}</option>
+            ))}
+          </select>
+        </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm">
           <div className="text-xs uppercase text-zinc-500">Level / Floor</div>
           <div className="mt-1 flex items-center gap-2">
