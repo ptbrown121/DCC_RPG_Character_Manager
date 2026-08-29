@@ -6,3 +6,6 @@ export * from "./adversary";
 export * from "./progression";
 export * from "./catalog/skills";
 export * from "./catalog/spells";
+export * from "./catalog/raceclass";
+export * from "./catalog/raceclassData";
+export * from "./campaign";

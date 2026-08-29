@@ -25,6 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/encounters/new" className="text-sm text-zinc-300 hover:text-white">
               New Encounter
             </Link>
+            <Link href="/campaigns/new" className="text-sm text-zinc-300 hover:text-white">
+              New Campaign
+            </Link>
           </div>
         </nav>
         <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>

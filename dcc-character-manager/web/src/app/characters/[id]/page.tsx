@@ -23,6 +23,7 @@ import {
   type CatalogSpell,
 } from "@/lib/rules";
 import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
+import RaceClassPanel from "@/components/RaceClassPanel";
 import type { Character, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -154,6 +155,9 @@ function Sheet() {
           </div>
         </div>
       </section>
+
+      {/* Race & Class */}
+      <RaceClassPanel character={c} onApply={(patch) => persist(patch)} />
 
       {/* Health & Mana */}
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">

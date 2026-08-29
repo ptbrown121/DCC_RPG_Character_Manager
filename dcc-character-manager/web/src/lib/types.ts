@@ -33,6 +33,18 @@ export interface AttackRow {
   notes?: string;
 }
 
+export interface AppliedTrait {
+  name: string;
+  abilities: string[];
+  drawbacks: string[];
+  custom?: boolean;
+}
+
+export interface Traits {
+  race?: AppliedTrait;
+  class?: AppliedTrait;
+}
+
 export interface Character {
   id: string;
   owner_id: string;
@@ -51,9 +63,72 @@ export interface Character {
   skills: SkillRow[];
   spells: SpellRow[];
   debuffs: DebuffRow[];
+  traits: Traits;
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AchievementEntry {
+  name: string;
+  reward: string;
+  troll: boolean;
+  earned_by: string;
+  at: string;
+}
+
+export interface Campaign {
+  id: string;
+  owner_id: string;
+  name: string;
+  achievements: AchievementEntry[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignFloor {
+  id: string;
+  campaign_id: string;
+  owner_id: string;
+  floor_number: number;
+  collapse_days: number;
+  hours_elapsed: number;
+  janitor: string | null;
+  status: "upcoming" | "active" | "cleared" | "collapsed";
+  notes: string | null;
+}
+
+export interface BossEntry {
+  name: string;
+  level: number;
+  tier: string;
+  clues: string;
+  phases: string;
+  defeated: boolean;
+}
+
+export interface NpcEntry {
+  name: string;
+  title: string;
+  level: number | null;
+  kind: "statblock" | "ai-card" | "noncombatant";
+  notes: string;
+}
+
+export interface CampaignArea {
+  id: string;
+  campaign_id: string;
+  floor_id: string;
+  owner_id: string;
+  kind: "neighborhood" | "quest";
+  name: string;
+  status: "unexplored" | "active" | "cleared";
+  sections: Record<string, string>;
+  bosses: BossEntry[];
+  npcs: NpcEntry[];
+  sort: number;
+  created_at: string;
 }
 
 export interface Encounter {

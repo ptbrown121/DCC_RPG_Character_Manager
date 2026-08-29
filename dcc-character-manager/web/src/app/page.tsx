@@ -5,12 +5,13 @@ import Link from "next/link";
 import AuthGate, { useUser } from "@/components/AuthGate";
 import { supabase } from "@/lib/supabase";
 import { statMod, FLOOR_TIMERS, STRENGTH_LABELS } from "@/lib/rules";
-import type { Character, Encounter } from "@/lib/types";
+import type { Campaign, Character, Encounter } from "@/lib/types";
 
 function Dashboard() {
   const { user } = useUser();
   const [characters, setCharacters] = useState<Character[]>([]);
   const [encounters, setEncounters] = useState<Encounter[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -23,6 +24,10 @@ function Dashboard() {
       .select("*")
       .order("updated_at", { ascending: false })
       .then(({ data }) => setEncounters((data as Encounter[]) ?? []));
+    sb.from("campaigns")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .then(({ data }) => setCampaigns((data as Campaign[]) ?? []));
   }, [user]);
 
   return (
@@ -99,6 +104,30 @@ function Dashboard() {
                   {FLOOR_TIMERS[e.floor] ? ` (${FLOOR_TIMERS[e.floor]}-day floor)` : ""} ·{" "}
                   {STRENGTH_LABELS[e.strength]} · party of {e.party_size}
                   {e.round > 0 ? ` · round ${e.round}` : ""}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section className="md:col-span-2">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-bold">Campaigns</h2>
+          <Link href="/campaigns/new" className="text-sm text-amber-400 hover:underline">
+            + New
+          </Link>
+        </div>
+        {campaigns.length === 0 && <p className="text-sm text-zinc-500">No campaigns yet.</p>}
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {campaigns.map((cp) => (
+            <li key={cp.id}>
+              <Link
+                href={`/campaigns/${cp.id}`}
+                className="block rounded-lg border border-zinc-800 bg-zinc-900 p-3 hover:border-amber-600"
+              >
+                <span className="font-semibold">{cp.name}</span>
+                <div className="mt-1 text-xs text-zinc-400">
+                  {cp.achievements.length} achievement{cp.achievements.length === 1 ? "" : "s"} logged
                 </div>
               </Link>
             </li>

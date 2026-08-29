@@ -1,0 +1,482 @@
+// Class catalog, part 2: Fighter, Mage, Monk, Paladin, and Rogue categories.
+// Source: Core Rulebook pp. 150-158 (extraction/core_pages_148-155.md, core_pages_156-163.md).
+
+import type { CatalogClass } from "./raceclass";
+
+export const CLASSES_2: CatalogClass[] = [
+  // ---------------------------------------------------------------- Fighter
+  {
+    name: "Boring Ol' Fighter",
+    classTypes: ["Fighter"],
+    statBonuses: { str: 2, con: 2 },
+    skillGrants: [
+      { name: "Weapon Skill of your choice", ranks: 5 },
+      { name: "Dodge", ranks: 3 },
+      {
+        name: "Two of: Aiming, Attack of Opportunity, Catcher, Shield Block, or Zone of Control",
+        ranks: 2,
+      },
+    ],
+    abilities: [
+      "Access to any Weapon Training Guild; coupon for one free training there each floor",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Pit Fighter",
+    classTypes: ["Fighter"],
+    statBonuses: { dex: 3, int: 2, str: 1 },
+    skillGrants: [
+      { name: "Attack of Opportunity", ranks: 3 },
+      { name: "Dirty Fighting", ranks: 3 },
+      { name: "Dodge", ranks: 2 },
+      { name: "Improvised Weapons", ranks: 2 },
+    ],
+    abilities: [
+      "+2 DR Buff",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Shotgun Messenger",
+    classTypes: ["Fighter"],
+    statBonuses: { str: 2, con: 2, dex: 2, cha: -2 },
+    skillGrants: [
+      { name: "Ranged Weapon Skill of your choice", ranks: 5 },
+      { name: "Aiming", ranks: 2 },
+      { name: "Intimidate", ranks: 2 },
+      { name: "All muscle-powered movement-related Skills", ranks: 1 },
+    ],
+    abilities: [
+      "Access to any Weapon Training Guild; coupon for one free training there each floor",
+      "Access to the Desperado Club",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Straight-to-DVD Action Hero",
+    classTypes: ["Fighter"],
+    statBonuses: { str: 3, con: 3, dex: 3, cha: 3, int: -2 },
+    skillGrants: [
+      { name: "Unarmed Combat", ranks: 2 },
+      { name: "Driving", ranks: 1 },
+      { name: "Running", ranks: 1 },
+      { name: "Performance", ranks: 1 },
+    ],
+    abilities: [
+      "No damage from falling",
+      "+1 DR",
+      "The Manager Benefit",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Sword and Boarder",
+    classTypes: ["Fighter"],
+    statBonuses: { str: 2, con: 2, dex: 2, int: -2 },
+    skillGrants: [
+      { name: "Shield Block", ranks: 5 },
+      { name: "Edged Weapon Skill of your choice", ranks: 3 },
+      { name: "Attack of Opportunity", ranks: 2 },
+      { name: "Catcher", ranks: 2 },
+    ],
+    abilities: ["Access to the Desperado Club"],
+    drawbacks: [],
+  },
+  {
+    name: "Monster Truck Driver",
+    classTypes: ["Fighter"],
+    statBonuses: { con: 4, dex: 2, str: -2, int: -2 },
+    skillGrants: [
+      { name: "Gear Head", ranks: 3 },
+      { name: "Driving", ranks: 3 },
+      { name: "Pathfinder", ranks: 3 },
+    ],
+    abilities: [
+      "While moving in combat: Con Mod bonus in Health Bar slots (only) equal to 1/10 of conveyance's Move; on foot requires a Move Action the previous round",
+      "Slam charge: [Rank = Floor Number] + Dex to hit, 1d12 Bludgeoning, 2d10+3ft Line, then Fatigued; Critical Fail on natural 4 or less; 30-hour cooldown; +1d at Rank 5/10/15; Rank increases only by Floor",
+      "Once per combat when you lose 2+ Health Bar slots, roll 1d2; on 1 the attacker loses 1 Health Bar slot",
+      "Resistance to Force damage",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+    prerequisites: "Driving Skill Rank 5+",
+  },
+  {
+    name: "Zulu Warrior",
+    classTypes: ["Fighter"],
+    statBonuses: { str: 3, con: 3, dex: 3 },
+    skillGrants: [
+      { name: "Melee Weapon Skill of your choice", ranks: 3 },
+      { name: "Attack of Opportunity", ranks: 2 },
+      { name: "Endurance", ranks: 2 },
+      { name: "Running", ranks: 2 },
+      { name: "One Weapon Skill of your choice", ranks: 0, toRank20: true },
+    ],
+    abilities: [
+      "+1 DR",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+  },
+
+  // ---------------------------------------------------------------- Mage
+  {
+    name: "Boring Ol' Mage",
+    classTypes: ["Mage"],
+    statBonuses: { int: 5, cha: 5, str: -2, dex: -2 },
+    skillGrants: [
+      { name: "Fire Spell of your choice", ranks: 3, note: "spell" },
+      { name: "Force Spell of your choice", ranks: 2, note: "spell" },
+      { name: "Sonic Spell of your choice", ranks: 2, note: "spell" },
+      { name: "Two different Passive Spells of your choice", ranks: 2, note: "spell" },
+      { name: "Lore", ranks: 2 },
+      { name: "Arcane", ranks: 1 },
+    ],
+    abilities: [],
+    drawbacks: [
+      "-3 Ranks in all Dexterity Skills (minimum 1 Rank if you have any Ranks)",
+      "-3 Ranks in all Strength Skills (minimum 1 Rank if you have any Ranks)",
+    ],
+  },
+  {
+    name: "Blizzardmancer",
+    classTypes: ["Mage"],
+    statBonuses: { int: 4, dex: 3, str: -2 },
+    skillGrants: [
+      { name: "Ice Blast", ranks: 4, note: "spell" },
+      { name: "Frost Scar", ranks: 4, note: "spell" },
+      { name: "Aiming", ranks: 2 },
+    ],
+    abilities: [
+      "Resistance to Ice damage",
+      "May use the Aiming Skill for single-target Ice Spells",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Crisper",
+    classTypes: ["Mage"],
+    statBonuses: { int: 3, dex: 2, con: -2 },
+    skillGrants: [
+      { name: "Wall of Fire", ranks: 3, note: "spell" },
+      { name: "Fire Fingers", ranks: 3, note: "spell" },
+      { name: "Fireball", ranks: 2, note: "spell" },
+      { name: "Wilbur's Slow-Build Fireblast", ranks: 2, note: "spell" },
+      { name: "Lore", ranks: 2 },
+    ],
+    abilities: ["Resistance to Fire damage"],
+    drawbacks: ["No DR against Ice or water-based damage"],
+  },
+  {
+    name: "Fire Spiritualist",
+    classTypes: ["Bard", "Mage"],
+    statBonuses: { int: 2, cha: 2 },
+    skillGrants: [
+      { name: "Holy Aura", ranks: 2, note: "spell" },
+      { name: "Hot Stuff Aura", ranks: 2, note: "spell" },
+      { name: "Heal Others", ranks: 2, toRank20: true, note: "spell" },
+      { name: "Intimate Touches", ranks: 2, note: "spell" },
+    ],
+    abilities: [
+      "Ethereal Hug: once per day for one scene, party gains +1 DR, Rank 4 Regeneration, +1 to hit on Weapon and Spell Skill Checks, and +1d4 bonus damage",
+    ],
+    drawbacks: ["Vulnerable to Ice damage"],
+  },
+  {
+    name: "Forsaken Aerialist",
+    classTypes: ["Mage"],
+    statBonuses: { int: 5, cha: -2 },
+    skillGrants: [
+      { name: "Drain Life", ranks: 3, note: "spell" },
+      { name: "Soul Collector", ranks: 3, note: "spell" },
+      { name: "Alchemy", ranks: 1 },
+      { name: "Infusion", ranks: 1 },
+      { name: "Tactics", ranks: 1 },
+    ],
+    abilities: [
+      "Double the duration of your Rank 5 and lower Spells that have a duration",
+      "Your Spells can affect a creature without it realizing it is under a Spell effect",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Necromancer",
+    classTypes: ["Mage", "Necromancer"],
+    statBonuses: { int: 2, dex: 2, con: -2, cha: -2 },
+    skillGrants: [
+      { name: "Soul Collector", ranks: 4, note: "spell" },
+      { name: "Rise, Dead Minion!", ranks: 4, note: "spell" },
+      { name: "Drain Life", ranks: 2, note: "spell" },
+      { name: "Second Chance", ranks: 2, note: "spell" },
+    ],
+    abilities: [
+      "Once per rest, ask a corpse a number of questions equal to your Int; it answers truthfully per its knowledge in life",
+      "Killing an undead Mob heals 1 Health Bar, up to 5 Health Bar per combat",
+    ],
+    drawbacks: [],
+  },
+
+  // ---------------------------------------------------------------- Monk
+  {
+    name: "Boring Ol' Monk",
+    classTypes: ["Monk"],
+    statBonuses: { con: 3, dex: 3, str: 1 },
+    skillGrants: [
+      { name: "Unarmed Combat", ranks: 3, toRank20: true },
+      { name: "Foot Soldier", ranks: 1 },
+      { name: "Iron Punch", ranks: 1 },
+      { name: "Powerful Strike", ranks: 1 },
+      { name: "Pugilism", ranks: 1 },
+      { name: "Smush", ranks: 1 },
+      { name: "Dexterity-based Weapon Skills", ranks: 1 },
+    ],
+    abilities: [],
+    drawbacks: [],
+  },
+  {
+    name: "Elemental Monk",
+    classTypes: ["Mage", "Monk"],
+    statBonuses: { int: 2, dex: 2 },
+    skillGrants: [
+      { name: "Unarmed Combat", ranks: 3 },
+      { name: "Dirt Clod", ranks: 1, note: "spell" },
+      { name: "Fire Fingers", ranks: 1, note: "spell" },
+      { name: "Frost Scar", ranks: 1, note: "spell" },
+      { name: "All Spells with Electric, Fire, and Ice damage types", ranks: 1, note: "spell" },
+    ],
+    abilities: [
+      "Advantage when attacking elemental creatures",
+      "Can breathe underwater",
+      "Can burrow",
+      "Can fly",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Prizefighter",
+    classTypes: ["Bard", "Monk"],
+    statBonuses: { con: 5, str: 2, int: -2, cha: -2 },
+    skillGrants: [
+      { name: "Pugilism", ranks: 5, toRank20: true },
+      { name: "Iron Punch", ranks: 5 },
+    ],
+    abilities: [
+      "1 x Floor Number gold per Mob killed with a Pugilism or Unarmed Combat attack",
+      "+1 Popularity when you kill a foe with a Pugilism or Unarmed Combat attack",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+    prerequisites: "Pugilism Skill Rank 5+",
+  },
+  {
+    name: "Spirit Healer",
+    classTypes: ["Druid", "Monk"],
+    statBonuses: { str: 3, con: 3, dex: 1 },
+    skillGrants: [
+      { name: "Drain Life", ranks: 3, note: "spell" },
+      { name: "Smush", ranks: 3 },
+      { name: "Heal Others", ranks: 2, toRank20: true, note: "spell" },
+      { name: "Heal Self", ranks: 2, note: "spell" },
+    ],
+    abilities: [
+      "Your healing Skills and Spells heal 1 additional Health Bar slot on single targets",
+      "Access to Club Vanquisher",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+  },
+  {
+    name: "Street Monk",
+    classTypes: ["Fighter", "Monk"],
+    statBonuses: { dex: 2, str: 1, cha: 1 },
+    skillGrants: [
+      { name: "Dirty Fighting", ranks: 2 },
+      { name: "Streetwise", ranks: 2 },
+      { name: "Unarmed Combat", ranks: 2 },
+      { name: "Pugilism", ranks: 1 },
+      { name: "Dexterity-based Weapon Skills", ranks: 1 },
+    ],
+    abilities: [
+      "+3 DR Buff",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: [],
+    note: "Book prints 'Earth Hobby Skill Potion' here where other entries say 'Earth Hobby Potion'.",
+  },
+
+  // ---------------------------------------------------------------- Paladin
+  {
+    name: "Boring Ol' Paladin",
+    classTypes: ["Paladin"],
+    statBonuses: { cha: 3 },
+    skillGrants: [
+      { name: "Protective Shell", ranks: 3, note: "spell" },
+      { name: "Heal Others", ranks: 3, note: "spell" },
+      { name: "Holy Aura", ranks: 3, note: "spell" },
+      { name: "Weapon Skill of your choice", ranks: 3 },
+      { name: "Catcher or Shield Block", ranks: 2 },
+    ],
+    abilities: ["Access to Club Vanquisher"],
+    drawbacks: [
+      "Must worship a deity",
+      "Cannot choose this Class if you have access to the Desperado Club",
+    ],
+    note: "Book prints +2 Charisma and +1 Charisma as two separate bullets; recorded here as net +3.",
+  },
+  {
+    name: "Cavalier",
+    classTypes: ["Fighter", "Paladin"],
+    statBonuses: { str: 2, con: 2 },
+    skillGrants: [
+      { name: "Catcher", ranks: 2 },
+      { name: "Riding", ranks: 2 },
+      { name: "Lance", ranks: 2 },
+      { name: "Shield", ranks: 2, note: "spell" },
+      { name: "Smite", ranks: 2, note: "spell" },
+    ],
+    abilities: [
+      "When protecting someone under your code with Catcher, gain Playing to the Cameras benefit without Disadvantage; counts as its once-per-session use",
+      "Bonded Mount one size larger than you: Move 40, DR 10 barding, Trample attack, pet carrier",
+      "When you or your Mount is attacked, you may redirect the attack from Mount to self or vice versa",
+      "Access to Club Vanquisher",
+    ],
+    drawbacks: ["Must worship a deity"],
+  },
+  {
+    name: "Sacred Paladin",
+    classTypes: ["Paladin"],
+    statBonuses: { str: 3, cha: 2 },
+    skillGrants: [
+      { name: "Catcher", ranks: 2 },
+      { name: "Weapon Skill of your choice", ranks: 2 },
+      { name: "Heal Others", ranks: 2, note: "spell" },
+      { name: "Smite", ranks: 2, note: "spell" },
+      { name: "Turn Undead", ranks: 2, note: "spell" },
+    ],
+    abilities: [
+      "Access to the Dungeon Book of the Floor club (Favored: Cleric or Paladin Spells only)",
+      "+2 DR Buff",
+      "Access to Club Vanquisher",
+    ],
+    drawbacks: [
+      "Must worship a deity",
+      "Cannot choose this Class if you have access to the Desperado Club",
+    ],
+  },
+
+  // ---------------------------------------------------------------- Rogue
+  {
+    name: "Boring Ol' Rogue",
+    classTypes: ["Rogue"],
+    statBonuses: { int: 1, dex: 1, cha: 1 },
+    skillGrants: [
+      { name: "Stealth", ranks: 3 },
+      { name: "Dagger", ranks: 2 },
+      { name: "Detect Trap", ranks: 2 },
+      { name: "Dodge", ranks: 2 },
+      { name: "Lockpicking", ranks: 2 },
+      { name: "Ambush", ranks: 1 },
+    ],
+    abilities: [
+      "Can see in total darkness",
+      "1 x Floor Number gold per Mob killed with a melee weapon",
+      "Access to the Desperado Club",
+    ],
+    drawbacks: ["Cannot choose this Class if you have access to Club Vanquisher"],
+  },
+  {
+    name: "Bomb Squad Tech",
+    classTypes: ["Rogue"],
+    statBonuses: { dex: 2, con: 1, int: -2 },
+    skillGrants: [
+      { name: "Bomb Surgeon", ranks: 3 },
+      { name: "Find Trap", ranks: 3 },
+      { name: "All Explosive-based Skills", ranks: 2 },
+    ],
+    abilities: [
+      "+1 DR Buff",
+      "Limb Regeneration Benefit: one lost limb fully regrows in 12 days minus your Con Mod",
+      "End of each floor: +1 to one trap-related Skill Advancement Check",
+      "End of each floor: +1 to one bomb-related Skill Advancement Check",
+      "Access to the Desperado Club",
+      "Access to the Naughty Boys Employment Agency",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: ["+3 Mana cost to cast damage-dealing Spells"],
+    prerequisites: "Boom! Achievement",
+    note: "Book prints the Silver Earth Box bullet twice; recorded once.",
+  },
+  {
+    name: "Compensated Anarchist",
+    classTypes: ["Monk", "Rogue"],
+    statBonuses: { cha: 5, int: 1 },
+    skillGrants: [
+      { name: "Backfire", ranks: 2 },
+      { name: "Escape Plan", ranks: 2 },
+      { name: "Find Trap", ranks: 2 },
+      { name: "Bomb Surgeon", ranks: 1 },
+      { name: "Hide in Shadows", ranks: 1 },
+      { name: "Trap Engineer", ranks: 1 },
+      { name: "Unarmed Combat", ranks: 1 },
+      { name: "Fear", ranks: 1, note: "spell" },
+    ],
+    abilities: [],
+    drawbacks: ["No Stat Mod bonus damage when using Edged Weapons"],
+    prerequisites: "Popularity 3+ and Explosives Handling Skill Rank 5+",
+  },
+  {
+    name: "High Rise Grifter",
+    classTypes: ["Rogue"],
+    statBonuses: { int: 1, cha: 1 },
+    skillGrants: [
+      { name: "Deception", ranks: 4 },
+      { name: "Stealth", ranks: 4 },
+      { name: "Dagger", ranks: 2 },
+      { name: "Escape Plan", ranks: 2 },
+      { name: "Determine Value", ranks: 1 },
+      { name: "Negotiation", ranks: 1 },
+    ],
+    abilities: [
+      "Access to the Desperado Club",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: ["Cannot choose this Class if you have access to Club Vanquisher"],
+  },
+  {
+    name: "Identity Thief",
+    classTypes: ["Rogue"],
+    statBonuses: { cha: 4, dex: 3 },
+    skillGrants: [
+      { name: "Deception", ranks: 5 },
+      { name: "Dagger", ranks: 3 },
+      { name: "Investigation", ranks: 2 },
+    ],
+    abilities: [
+      "Tier 3 Makeup Table",
+      "Access to the Desperado Club",
+      "Silver Earth Box with guaranteed Earth Hobby Potion",
+    ],
+    drawbacks: ["Cannot choose this Class if you have access to Club Vanquisher"],
+  },
+  {
+    name: "Swashbuckler",
+    classTypes: ["Bard", "Fighter", "Rogue"],
+    statBonuses: { dex: 3, cha: 3 },
+    skillGrants: [
+      { name: "Rapier or Longsword", ranks: 3, toRank20: true },
+      { name: "Balance", ranks: 2 },
+      { name: "Dodge", ranks: 2 },
+      { name: "Performance", ranks: 1 },
+      { name: "Light on Your Feet", ranks: 1 },
+    ],
+    abilities: [
+      "Advantage on melee attacks made from a position higher than your opponent",
+      "Once per combat after killing an enemy: Unopposed Performance Skill Check; Amazing Success or better grants +1 Popularity",
+    ],
+    drawbacks: [],
+  },
+];
