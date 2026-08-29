@@ -24,13 +24,16 @@ Studios). Next.js + Supabase, deployable on Vercel. Rules data extracted in `../
 2. In the SQL editor, run `supabase/migrations/0001_init.sql`.
 3. Enable Email auth (Authentication → Providers → Email). For local convenience you can
    turn off email confirmation.
-4. `cp .env.example .env.local` and fill in the project URL and anon key.
+4. `cp .env.example .env.local` and fill in the project URL and the **publishable** API key
+   (`sb_publishable_...`) from Project Settings → API Keys. This app uses Supabase's new
+   API-key system; don't use the legacy JWT anon key, and never put a secret key
+   (`sb_secret_...`) in a `NEXT_PUBLIC_` variable.
 5. `npm install && npm run dev`
 
 ## Deploy to Vercel
 
 - Import the repo; set the **Root Directory** to `dcc-character-manager/web`.
-- Add the two `NEXT_PUBLIC_SUPABASE_*` environment variables.
+- Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 - Add your Vercel URL to Supabase Auth → URL Configuration → Redirect URLs.
 
 ## Tests

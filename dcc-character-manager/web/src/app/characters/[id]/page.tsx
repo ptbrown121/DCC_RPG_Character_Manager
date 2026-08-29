@@ -19,8 +19,11 @@ import {
   DEBUFFS,
   roundDown,
   type StatKey,
+  type CatalogSkill,
+  type CatalogSpell,
 } from "@/lib/rules";
-import type { Character, SkillRow } from "@/lib/types";
+import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
+import type { Character, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
   const { id } = useParams<{ id: string }>();
@@ -257,7 +260,26 @@ function Sheet() {
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-semibold">Skills</h2>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SkillSelect
+              exclude={c.skills.map((s) => s.name)}
+              onPick={(cs: CatalogSkill) =>
+                persist({
+                  skills: [
+                    ...c.skills,
+                    {
+                      name: cs.name,
+                      category: cs.category,
+                      stat: cs.stat,
+                      check_type: cs.checkType,
+                      rank: 0,
+                      marked: false,
+                      notes: [cs.damage, cs.range, cs.effect].filter(Boolean).join(" · ") || undefined,
+                    },
+                  ],
+                })
+              }
+            />
             <button
               onClick={() => persist({ skills: c.skills.map((s) => ({ ...s, marked: false })) })}
               className="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700"
@@ -327,6 +349,83 @@ function Sheet() {
             ))}
           </tbody>
         </table>
+      </section>
+
+      {/* Spells */}
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Spells</h2>
+          <SpellSelect
+            exclude={c.spells.map((s) => s.name)}
+            onPick={(sp: CatalogSpell) =>
+              persist({
+                spells: [
+                  ...c.spells,
+                  { name: sp.name, mana: sp.mana, range: sp.range, effect: sp.effect, rank: 1, notes: sp.type } as SpellRow,
+                ],
+              })
+            }
+          />
+        </div>
+        <p className="mb-2 text-xs text-zinc-500">
+          Attack spells roll d20 + Rank + INT Mod vs. Evade and add INT to damage. Must be in the
+          Hotlist to cast in combat; can&apos;t be used untrained.
+        </p>
+        <ul className="space-y-1 text-sm">
+          {c.spells.map((sp, i) => {
+            const affordable = c.current_mana >= sp.mana;
+            return (
+              <li key={`${sp.name}-${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5">
+                <span>
+                  <b>{sp.name}</b>
+                  <span className="ml-2 text-xs text-zinc-400">
+                    Rank{" "}
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={sp.rank}
+                      onChange={(e) =>
+                        persist({ spells: c.spells.map((s, j) => (j === i ? { ...s, rank: Number(e.target.value) } : s)) })
+                      }
+                      className="w-10 rounded border border-zinc-800 bg-zinc-900 px-1 text-center"
+                    />{" "}
+                    · {sp.mana} Mana · {sp.range} · {sp.effect}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  {sp.notes === "attack" && (
+                    <span className="font-mono text-xs text-emerald-400">d20 +{sp.rank + mods.int}</span>
+                  )}
+                  <button
+                    disabled={!affordable}
+                    onClick={() =>
+                      persist({
+                        current_mana: Math.max(0, c.current_mana - sp.mana),
+                        ...(sp.name === "Heal"
+                          ? { current_hb_slots: Math.min(10, c.current_hb_slots + REST_RULES.healSpellSlots) }
+                          : {}),
+                      })
+                    }
+                    className="rounded bg-indigo-700 px-2 py-0.5 text-xs font-semibold hover:bg-indigo-600 disabled:opacity-40"
+                    title={affordable ? `Spend ${sp.mana} Mana` : "Not enough Mana"}
+                  >
+                    Cast
+                  </button>
+                  {sp.name !== "Heal" && (
+                    <button
+                      onClick={() => persist({ spells: c.spells.filter((_, j) => j !== i) })}
+                      className="text-zinc-600 hover:text-red-400"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+          {c.spells.length === 0 && <li className="text-xs text-zinc-500">No spells known.</li>}
+        </ul>
       </section>
 
       {/* Wallet + notes */}

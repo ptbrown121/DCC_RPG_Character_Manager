@@ -15,8 +15,11 @@ import {
   deriveFromEnhanced,
   ENTRY_POINTS,
   creationStatPoints,
+  type CatalogSkill,
+  type CatalogSpell,
 } from "@/lib/rules";
-import type { SkillRow } from "@/lib/types";
+import { SkillSelect, SpellSelect } from "@/components/CatalogSelect";
+import type { SkillRow, SpellRow } from "@/lib/types";
 
 const SKILL_STATS: (StatKey | "")[] = ["", ...STAT_KEYS];
 
@@ -29,6 +32,7 @@ function NewCharacter() {
   const [klass, setKlass] = useState("");
   const [scores, setScores] = useState<StatScores>(emptyScores(0));
   const [skills, setSkills] = useState<SkillRow[]>([]);
+  const [spells, setSpells] = useState<SpellRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +68,30 @@ function NewCharacter() {
     ]);
   }
 
+  function addCatalogSkill(cs: CatalogSkill) {
+    if (skills.some((s) => s.name === cs.name)) return;
+    setSkills((s) => [
+      ...s,
+      {
+        name: cs.name,
+        category: cs.category,
+        stat: cs.stat,
+        check_type: cs.checkType,
+        rank: 1,
+        marked: false,
+        notes: [cs.damage, cs.range, cs.effect].filter(Boolean).join(" · ") || undefined,
+      },
+    ]);
+  }
+
+  function addCatalogSpell(sp: CatalogSpell) {
+    if (sp.name === "Heal" || spells.some((s) => s.name === sp.name)) return;
+    setSpells((s) => [
+      ...s,
+      { name: sp.name, mana: sp.mana, range: sp.range, effect: sp.effect, rank: 1, notes: sp.type },
+    ]);
+  }
+
   function updateSkill(i: number, patch: Partial<SkillRow>) {
     setSkills((s) => s.map((row, j) => (j === i ? { ...row, ...patch } : row)));
   }
@@ -76,7 +104,10 @@ function NewCharacter() {
     setSaving(true);
     setError(null);
     // Everyone gets the Heal spell on entry (2 Mana, restores 2 HB slots, self only).
-    const spells = [{ name: "Heal", mana: 2, range: "Self", effect: "Heal 2 HB slots (Interrupt)", rank: 1 }];
+    const allSpells: SpellRow[] = [
+      { name: "Heal", mana: 2, range: "Self", effect: "Heal 2 HB slots (Interrupt)", rank: 1 },
+      ...spells,
+    ];
     const { data, error } = await supabase()
       .from("characters")
       .insert({
@@ -91,7 +122,7 @@ function NewCharacter() {
         current_mana: derived.maxMana,
         ai_favor: 1,
         skills: skills.filter((s) => s.name.trim()),
-        spells,
+        spells: allSpells,
       })
       .select("id")
       .single();
@@ -197,11 +228,14 @@ function NewCharacter() {
       </section>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Skills</h2>
-          <button onClick={addSkill} className="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700">
-            + Add skill
-          </button>
+          <div className="flex items-center gap-2">
+            <SkillSelect onPick={addCatalogSkill} exclude={skills.map((s) => s.name)} />
+            <button onClick={addSkill} className="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700">
+              + Custom
+            </button>
+          </div>
         </div>
         <p className="mb-3 text-xs text-zinc-500">
           Level 1 creation: 2-of-3 skills from each of four backgrounds (Ranks 1/1/3/2) plus a base
@@ -263,6 +297,33 @@ function NewCharacter() {
             </button>
           </div>
         ))}
+      </section>
+
+      <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Spells</h2>
+          <SpellSelect onPick={addCatalogSpell} exclude={["Heal", ...spells.map((s) => s.name)]} />
+        </div>
+        <p className="mb-3 text-xs text-zinc-500">
+          Heal is added automatically. Level 1 creation: instead of a weapon you may take one
+          starter attack spell (Dirt Clod, Fire Fingers, Frost Scar, Shock Treatment, Soul
+          Collector) — requires INT 4+, comes with 5 Standard Mana Potions. Spells can&apos;t be
+          used untrained and must be in the Hotlist to cast in combat.
+        </p>
+        <ul className="space-y-1 text-sm">
+          <li className="flex items-center justify-between rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-zinc-400">
+            <span><b className="text-zinc-200">Heal</b> — 2 Mana · Self · heal 2 HB slots (Interrupt)</span>
+            <span className="text-xs">automatic</span>
+          </li>
+          {spells.map((sp, i) => (
+            <li key={sp.name} className="flex items-center justify-between rounded border border-zinc-800 bg-zinc-950 px-3 py-1.5">
+              <span>
+                <b>{sp.name}</b> — {sp.mana} Mana · {sp.range} · {sp.effect}
+              </span>
+              <button onClick={() => setSpells((rows) => rows.filter((_, j) => j !== i))} className="text-zinc-600 hover:text-red-400">✕</button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
