@@ -136,12 +136,20 @@ export interface AchievementEntry {
   at: string;
 }
 
+/** Shared map/monster image the GM displays on every party sheet ("Area feed"). */
+export interface SceneState {
+  imageUrl?: string;
+  caption?: string;
+}
+
 export interface Campaign {
   id: string;
   owner_id: string;
   name: string;
   achievements: AchievementEntry[];
   vehicles: VehicleEntry[];
+  /** Optional until migration 0007 has been run. */
+  scene?: SceneState | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

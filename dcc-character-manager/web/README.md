@@ -28,11 +28,16 @@ truth for any rules question; code comments cite them by section/table.
   or `hud:character:<id>` (private), and can push a `hud_config` that switches HUD
   elements off on player screens. Sends are ephemeral broadcast — no tables involved,
   receiving sheets must be open, and private targeting is client-side convenience, not a
-  security boundary.
+  security boundary. The exception is the **Area feed** (`SceneStage`): a persistent
+  map/monster image saved to `campaigns.scene` (migration 0007) and displayed
+  center-stage on every party sheet; live updates ride the same channel, while reloads
+  and late joiners read the campaign row. The sheet has a 🎮 PLAY / 🛠 MANAGE toggle —
+  play mode hides all bookkeeping sections (stats editing, race/class, fame, loot,
+  companions, wallet, notes) to leave room for the HUD and Area feed.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0006, in order. All additive; RLS is owner-only
+- `supabase/migrations/` — 0001–0007, in order. All additive; RLS is owner-only
   (`auth.uid() = owner_id`) on every table. New schema = new numbered migration; the user
   runs them by pasting into the Supabase SQL editor.
 

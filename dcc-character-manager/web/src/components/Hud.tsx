@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { SpellRow } from "@/lib/types";
+import type { SceneState, SpellRow } from "@/lib/types";
 
 /*
  * In-fiction HUD chrome for the character sheet, laid out per the book's default:
@@ -172,6 +172,23 @@ export function Minimap({ floor, label }: { floor: number; label: string | null 
   );
 }
 
+/** Persistent center-stage display: the map or monster the party is looking at. */
+export function SceneStage({ scene }: { scene: SceneState | null }) {
+  if (!scene || (!scene.imageUrl && !scene.caption)) return null;
+  return (
+    <section className="overflow-hidden rounded-lg border border-emerald-900 bg-zinc-950">
+      <div className="border-b border-emerald-900/50 px-3 py-1 font-display text-[10px] tracking-[0.3em] text-emerald-400">
+        ▚ AREA FEED ▞
+      </div>
+      {scene.imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary GM-supplied URL, can't allowlist domains for next/image
+        <img src={scene.imageUrl} alt="" className="max-h-[65vh] w-full object-contain" />
+      )}
+      {scene.caption && <p className="px-3 py-2 text-sm italic text-zinc-300">{scene.caption}</p>}
+    </section>
+  );
+}
+
 /** Full-screen System message overlay — the AI directing your attention to something. */
 export function SystemOverlay({ send, onDismiss }: { send: SystemSend; onDismiss: () => void }) {
   return (
@@ -207,13 +224,21 @@ export function SystemOverlay({ send, onDismiss }: { send: SystemSend; onDismiss
 export function GmSendPanel({
   campaignId,
   party,
+  scene,
+  onSceneChange,
 }: {
   campaignId: string;
   party: { id: string; name: string }[];
+  /** Current persisted Area feed (campaigns.scene). */
+  scene?: SceneState | null;
+  /** Persist a new Area feed; the panel handles the live broadcast itself. */
+  onSceneChange?: (scene: SceneState) => void;
 }) {
   const [target, setTarget] = useState("all");
   const [text, setText] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [sceneUrl, setSceneUrl] = useState(scene?.imageUrl ?? "");
+  const [sceneCaption, setSceneCaption] = useState(scene?.caption ?? "");
   const [status, setStatus] = useState<string | null>(null);
   const [hidden, setHidden] = useState<HudElement[]>([]);
   const channels = useRef<Map<string, RealtimeChannel>>(new Map());
@@ -226,8 +251,7 @@ export function GmSendPanel({
     };
   }, []);
 
-  async function targetChannel(): Promise<RealtimeChannel> {
-    const name = target === "all" ? `hud:campaign:${campaignId}` : `hud:character:${target}`;
+  async function channelFor(name: string): Promise<RealtimeChannel> {
     let ch = channels.current.get(name);
     if (!ch) {
       const created = supabase().channel(name);
@@ -240,6 +264,21 @@ export function GmSendPanel({
       ch = created;
     }
     return ch;
+  }
+
+  function targetChannel(): Promise<RealtimeChannel> {
+    return channelFor(target === "all" ? `hud:campaign:${campaignId}` : `hud:character:${target}`);
+  }
+
+  /** Area feed is always party-wide and persisted, unlike transient System sends. */
+  async function setScene(next: SceneState) {
+    onSceneChange?.(next);
+    await (await channelFor(`hud:campaign:${campaignId}`)).send({
+      type: "broadcast",
+      event: "scene",
+      payload: next,
+    });
+    setStatus(next.imageUrl || next.caption ? "Area feed updated on every open sheet." : "Area feed cleared.");
   }
 
   const targetLabel =
@@ -303,6 +342,44 @@ export function GmSendPanel({
           Send
         </button>
       </div>
+      {onSceneChange && (
+        <div className="mt-3 border-t border-zinc-800 pt-3">
+          <p className="mb-2 text-xs text-zinc-400">
+            <b className="text-emerald-400">Area feed</b> — persistent map/monster image shown
+            center-stage on every party sheet (saved to the campaign, so it survives reloads):
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              placeholder="Image URL (map, monster…)"
+              value={sceneUrl}
+              onChange={(e) => setSceneUrl(e.target.value)}
+              className="min-w-56 flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1"
+            />
+            <input
+              placeholder="Caption"
+              value={sceneCaption}
+              onChange={(e) => setSceneCaption(e.target.value)}
+              className="w-56 rounded border border-zinc-700 bg-zinc-800 px-2 py-1"
+            />
+            <button
+              onClick={() => setScene({ imageUrl: sceneUrl.trim() || undefined, caption: sceneCaption.trim() || undefined })}
+              className="rounded bg-emerald-700 px-3 py-1 font-semibold hover:bg-emerald-600"
+            >
+              Display
+            </button>
+            <button
+              onClick={() => {
+                setSceneUrl("");
+                setSceneCaption("");
+                setScene({});
+              }}
+              className="rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-3 text-xs">
         <span className="text-zinc-400">HUD elements for {targetLabel}:</span>
         {HUD_ELEMENTS.map((el) => (
@@ -333,7 +410,11 @@ export function GmSendPanel({
 export function useSystemSends(
   characterId: string,
   campaignId: string | null,
-  handlers: { onSend: (send: SystemSend) => void; onConfig: (config: HudConfig) => void },
+  handlers: {
+    onSend: (send: SystemSend) => void;
+    onConfig: (config: HudConfig) => void;
+    onScene: (scene: SceneState) => void;
+  },
 ) {
   const cb = useRef(handlers);
   useEffect(() => {
@@ -348,6 +429,7 @@ export function useSystemSends(
     for (const ch of channels) {
       ch.on("broadcast", { event: "system_send" }, ({ payload }) => cb.current.onSend(payload as SystemSend))
         .on("broadcast", { event: "hud_config" }, ({ payload }) => cb.current.onConfig(payload as HudConfig))
+        .on("broadcast", { event: "scene" }, ({ payload }) => cb.current.onScene(payload as SceneState))
         .subscribe();
     }
     return () => {

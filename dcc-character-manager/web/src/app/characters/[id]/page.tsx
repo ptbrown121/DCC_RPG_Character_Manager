@@ -39,13 +39,14 @@ import {
   Hotlist,
   Minimap,
   NotificationsHud,
+  SceneStage,
   SystemOverlay,
   useSystemSends,
   type HudElement,
   type HudNotification,
   type SystemSend,
 } from "@/components/Hud";
-import type { Campaign, CampaignFloor, Character, SkillRow, SpellRow } from "@/lib/types";
+import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
   const { id } = useParams<{ id: string }>();
@@ -102,6 +103,10 @@ function Sheet() {
   }, [campaignId]);
 
   const [hudHidden, setHudHidden] = useState<HudElement[]>([]);
+  // "play" clears the bookkeeping away for table time; "manage" is the full editable sheet.
+  const [mode, setMode] = useState<"play" | "manage">("play");
+  // Live Area-feed updates override the persisted one fetched with the campaign.
+  const [liveScene, setLiveScene] = useState<SceneState | null>(null);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -109,6 +114,10 @@ function Sheet() {
     },
     // GM switching HUD elements off (interviews, or the AI being "funny").
     onConfig: (config) => setHudHidden(config.hidden),
+    onScene: (scene) => {
+      setLiveScene(scene);
+      notify("floor", scene.imageUrl || scene.caption ? "Area feed updated." : "Area feed cleared.");
+    },
   });
 
   const derived = useMemo(() => (c ? deriveFromEnhanced(c.stats.enhanced, c.move_ft) : null), [c]);
@@ -257,12 +266,46 @@ function Sheet() {
             {[c.race, c.class].filter(Boolean).join(" ") || "no race/class yet (Floor 3 unlock)"}
           </p>
         </div>
-        <span className="text-xs text-zinc-500">
-          {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : saveState === "saved" ? "Saved" : ""}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">
+            {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : saveState === "saved" ? "Saved" : ""}
+          </span>
+          {(["play", "manage"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`rounded px-2 py-1 font-display text-xs tracking-wider ${
+                mode === m ? "bg-amber-500 font-semibold text-zinc-950" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              }`}
+              title={m === "play" ? "Combat view — bookkeeping hidden, stage for the Area feed" : "Full editable sheet"}
+            >
+              {m === "play" ? "🎮 PLAY" : "🛠 MANAGE"}
+            </button>
+          ))}
+        </div>
       </header>
 
+      {/* What the party is looking at (GM-controlled, persisted on the campaign) */}
+      <SceneStage scene={liveScene ?? campaigns.find((cp) => cp.id === c.campaign_id)?.scene ?? null} />
+
+      {/* Play mode: one readonly line of stats instead of the editable grid */}
+      {mode === "play" && (
+        <section className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm">
+          {STAT_KEYS.map((k) => (
+            <span key={k} className="text-zinc-300">
+              <span className="text-xs uppercase text-zinc-500">{STAT_LABELS[k]}</span>{" "}
+              <b className="font-display">{c.stats.enhanced[k]}</b>
+              <span className="font-mono text-xs text-emerald-400"> +{statMod(c.stats.enhanced[k])}</span>
+            </span>
+          ))}
+          <span className="text-xs text-zinc-400">
+            Evade d20 +{mods.dex} · Move {c.move_ft} ft · AI Favor {c.ai_favor}
+          </span>
+        </section>
+      )}
+
       {/* Stats */}
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="mb-3 font-semibold">Stats (Enhanced layer)</h2>
         <div className="grid grid-cols-5 gap-2">
@@ -311,9 +354,10 @@ function Sheet() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Race & Class */}
-      <RaceClassPanel character={c} onApply={(patch) => persist(patch)} />
+      {mode === "manage" && <RaceClassPanel character={c} onApply={(patch) => persist(patch)} />}
 
       {/* Health & Mana */}
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
@@ -650,13 +694,14 @@ function Sheet() {
       </section>
 
       {/* Fame & Faith */}
-      <FameFaithPanel character={c} onPatch={(patch) => persist(patch)} />
+      {mode === "manage" && <FameFaithPanel character={c} onPatch={(patch) => persist(patch)} />}
 
       {/* Loot & Companions */}
-      <LootPanel character={c} onPatch={(patch) => persist(patch)} />
-      <CompanionsPanel character={c} onPatch={(patch) => persist(patch)} />
+      {mode === "manage" && <LootPanel character={c} onPatch={(patch) => persist(patch)} />}
+      {mode === "manage" && <CompanionsPanel character={c} onPatch={(patch) => persist(patch)} />}
 
       {/* Wallet + notes */}
+      {mode === "manage" && (
       <section className="grid gap-4 sm:grid-cols-3">
         {(
           [
@@ -700,7 +745,9 @@ function Sheet() {
           </div>
         </div>
       </section>
+      )}
 
+      {mode === "manage" && (
       <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="mb-2 font-semibold">Notes</h2>
         <textarea
@@ -712,6 +759,7 @@ function Sheet() {
           placeholder="Past Trauma, Loose End, Regret, gear, achievements…"
         />
       </section>
+      )}
     </div>
   );
 }

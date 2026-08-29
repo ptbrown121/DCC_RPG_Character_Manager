@@ -264,8 +264,13 @@ function CampaignPage() {
         </div>
       </section>
 
-      {/* System sends to player HUDs (party-wide or private) + HUD element control */}
-      <GmSendPanel campaignId={id} party={party.map((p) => ({ id: p.id, name: p.name }))} />
+      {/* System sends to player HUDs (party-wide or private), Area feed, HUD element control */}
+      <GmSendPanel
+        campaignId={id}
+        party={party.map((p) => ({ id: p.id, name: p.name }))}
+        scene={campaign.scene ?? null}
+        onSceneChange={(scene) => patchCampaign({ scene })}
+      />
 
       <section className="space-y-3">
         {floors.map((f) => (
