@@ -4,9 +4,10 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { assetUrl } from "@/lib/upload";
-import { snapHalf } from "@/lib/stage";
+import { penStrokeWidth, snapHalf } from "@/lib/stage";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
+import { DrawingCapture, DrawingLayer, PEN_COLORS, useMapDrawings } from "./Drawing";
 import { MapStage, StageTransformContext } from "./MapStage";
 import type { AssetRow, MapGrid, MapRow, TokenRow } from "@/lib/types";
 
@@ -209,8 +210,12 @@ function Token({
   function onPointerDown(e: React.PointerEvent<SVGGElement>) {
     if (!movable || e.button !== 0) return;
     e.stopPropagation();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
     drag.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, origX: token.x, origY: token.y };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // capture is best-effort (synthetic events have no active pointer)
+    }
   }
 
   function onPointerMove(e: React.PointerEvent<SVGGElement>) {
@@ -343,8 +348,12 @@ export function MapTokensPanel({
 }) {
   const { user } = useUser();
   const { tokens, missing, dragMove, dragEnd, addToken, patchToken, deleteToken } = useMapTokens(map.id);
+  const { strokes, remoteLive, progress, commit, removeStroke, clearAll } = useMapDrawings(map);
   const [snap, setSnap] = useState(true);
   const [picker, setPicker] = useState(false);
+  const [tool, setTool] = useState<"move" | "pen" | "erase">("move");
+  const [penColor, setPenColor] = useState<string>(PEN_COLORS[0]);
+  const [thick, setThick] = useState(false);
 
   function placeFromAsset(asset: AssetRow) {
     setPicker(false);
@@ -360,26 +369,93 @@ export function MapTokensPanel({
     });
   }
 
+  const mapW = backgroundAsset?.width ?? 1000;
+  const mapH = backgroundAsset?.height ?? 1000;
+
   return (
     <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {(
+          [
+            ["move", "🖱 move", "Pan the map, drag tokens"],
+            ["pen", "✏ draw", "Freehand sketch on the map (the party watches live)"],
+            ["erase", "◻ erase", "Click a stroke to remove it"],
+          ] as const
+        ).map(([key, label, title]) => (
+          <button
+            key={key}
+            onClick={() => setTool(key)}
+            title={title}
+            className={`rounded border px-2 py-1 ${
+              tool === key ? "border-amber-600 bg-zinc-800 text-amber-300" : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-amber-600"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+        {tool === "pen" && (
+          <>
+            <span className="flex items-center gap-1">
+              {PEN_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setPenColor(c)}
+                  title={c}
+                  className={`h-5 w-5 rounded-full border-2 ${penColor === c ? "border-white" : "border-transparent"}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </span>
+            <button
+              onClick={() => setThick(!thick)}
+              className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-300 hover:border-amber-600"
+              title="Toggle line width"
+            >
+              {thick ? "━ thick" : "─ thin"}
+            </button>
+          </>
+        )}
+        {strokes.length > 0 && (
+          <button
+            onClick={() => {
+              if (window.confirm("Clear every drawing on this map?")) clearAll();
+            }}
+            className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-400 hover:border-red-700 hover:text-red-300"
+          >
+            🧹 clear drawings
+          </button>
+        )}
+      </div>
+
       {backgroundAsset ? (
         <MapStage
           imageUrl={assetUrl(backgroundAsset.storage_path)}
-          width={backgroundAsset.width}
-          height={backgroundAsset.height}
+          width={mapW}
+          height={mapH}
           grid={map.grid}
           className="h-80 w-full rounded border border-zinc-800"
         >
+          <DrawingLayer strokes={strokes} live={[remoteLive]} erase={tool === "erase"} onErase={removeStroke} />
           <TokenLayer
             tokens={tokens}
             grid={map.grid}
             snap={snap}
             gm
-            canMove={() => true}
+            canMove={() => tool === "move"}
             assets={assets}
             onDrag={dragMove}
             onDragEnd={dragEnd}
           />
+          {tool === "pen" && (
+            <DrawingCapture
+              width={mapW}
+              height={mapH}
+              color={penColor}
+              strokeWidth={penStrokeWidth(map.grid.pxPerSquare, thick)}
+              onProgress={progress}
+              onCommit={commit}
+            />
+          )}
         </MapStage>
       ) : (
         <div className="flex h-40 w-full items-center justify-center rounded border border-zinc-800 bg-zinc-950 text-xs text-zinc-600">
@@ -490,6 +566,7 @@ function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterI
   const [failed, setFailed] = useState(false);
   const fetchedAssetIds = useRef<Set<string>>(new Set());
   const { tokens, dragMove, dragEnd } = useMapTokens(mapId);
+  const { strokes, remoteLive } = useMapDrawings(map);
 
   useEffect(() => {
     let cancelled = false;
@@ -544,6 +621,7 @@ function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterI
           grid={map.grid}
           className="h-[65vh] w-full"
         >
+          <DrawingLayer strokes={strokes} live={[remoteLive]} />
           <TokenLayer
             tokens={tokens}
             grid={map.grid}

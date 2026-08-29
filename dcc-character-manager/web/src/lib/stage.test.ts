@@ -4,6 +4,7 @@ import {
   fitTransform,
   mapToScreen,
   pan,
+  penStrokeWidth,
   screenToMap,
   snapHalf,
   zoomAt,
@@ -56,6 +57,13 @@ describe("coordinate round-trips", () => {
     const [mx, my] = screenToMap(t, sx, sy);
     expect(mx).toBeCloseTo(640);
     expect(my).toBeCloseTo(480);
+  });
+
+  it("penStrokeWidth scales with the grid within clamps", () => {
+    expect(penStrokeWidth(100, false)).toBe(4);
+    expect(penStrokeWidth(100, true)).toBe(10);
+    expect(penStrokeWidth(10, false)).toBe(2); // floor
+    expect(penStrokeWidth(500, false)).toBe(8); // ceiling
   });
 
   it("snapHalf snaps to half-square steps around the grid offset", () => {

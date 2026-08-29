@@ -46,6 +46,13 @@ export function mapToScreen(t: StageTransform, mx: number, my: number): [number,
   return [mx * t.k + t.x, my * t.k + t.y];
 }
 
+/** Pen stroke width in map px, scaled to the grid so lines read the same on
+ * any map resolution. Thin ≈ 1/25 square (clamped 2–8 px), thick is 2.5×. */
+export function penStrokeWidth(pxPerSquare: number, thick: boolean): number {
+  const thin = Math.min(8, Math.max(2, pxPerSquare / 25));
+  return thick ? thin * 2.5 : thin;
+}
+
 /** Snap a map coordinate to the nearest half-square of the grid. */
 export function snapHalf(v: number, offset: number, pxPerSquare: number): number {
   if (pxPerSquare <= 0) return v;

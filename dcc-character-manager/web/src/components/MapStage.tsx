@@ -131,7 +131,11 @@ export function MapStage({
   function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (e.button !== 0 && e.button !== 1) return;
     drag.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // capture is best-effort (synthetic events have no active pointer)
+    }
   }
 
   function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {

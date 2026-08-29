@@ -63,6 +63,12 @@ truth for any rules question; code comments cite them by section/table.
   SECURITY DEFINER RPC. Live sync rides broadcast channel `map:<mapId>`
   (`token_move` throttled during drags, `token_upsert`/`token_remove` for
   lifecycle — see `Tokens.tsx`; snap-to-grid at half-square granularity).
+  The GM can also freehand-draw on the map (`Drawing.tsx`, no migration —
+  strokes persist to `maps.drawings` from 0010, in map coordinates): pen with
+  five colors and two grid-scaled widths, stroke-level eraser, clear-all.
+  Live sync uses channel `draw:<mapId>` (`draw_progress` streams the stroke
+  while the pen is down so the party watches it appear, plus `draw_commit` /
+  `draw_remove` / `draw_clear`); players are render-only.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
