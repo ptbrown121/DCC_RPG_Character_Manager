@@ -706,7 +706,9 @@ function ActiveMapStageInner({
               width={bg?.width ?? 1000}
               height={bg?.height ?? 1000}
               grid={map.grid}
-              className="h-[65vh] w-full"
+              // Sized so the stage bottom clears the fixed hotbar without scrolling:
+              // 21rem ≈ navbar + sheet header + section chrome + hotbar zone.
+              className="h-[max(20rem,calc(100vh-21rem))] w-full"
               onPing={meta.sendPing}
             >
               <DrawingLayer strokes={strokes} live={[remoteLive]} />

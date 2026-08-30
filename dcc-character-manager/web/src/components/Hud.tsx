@@ -53,7 +53,9 @@ export function NotificationsHud({ items }: { items: HudNotification[] }) {
   const unread = items.length - readCount;
 
   return (
-    <div className="hud-item fixed left-3 top-16 z-40">
+    // When the list is open it must paint over the HudRail below it (also z-40,
+    // later in the DOM) or the rail buttons sit on top of the messages.
+    <div className={`hud-item fixed left-3 top-16 ${open ? "z-[45]" : "z-40"}`}>
       <button
         onClick={() => {
           setOpen(!open);
