@@ -75,7 +75,8 @@ function Thumb({ asset, className = "" }: { asset: AssetRow; className?: string 
 /** GM's image library for a campaign: upload, browse by kind, rename, delete. */
 export function AssetLibrary({ campaignId }: { campaignId: string }) {
   const { assets, setAssets, loading } = useAssetList(campaignId);
-  const [filter, setFilter] = useState<AssetKind | "all">("all");
+  const [filter, setFilter] = useState<AssetKind | "all" | "orphans">("all");
+  const [orphans, setOrphans] = useState<Set<string> | null>(null);
   const [uploadKind, setUploadKind] = useState<AssetKind>("map");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +129,37 @@ export function AssetLibrary({ campaignId }: { campaignId: string }) {
     }
   }
 
-  const shown = filter === "all" ? assets : assets.filter((a) => a.kind === filter);
+  /** Orphan sweep: an asset no map background, token, item icon, or the Area
+   * feed references. Pre-migration tables just return nothing — harmless. */
+  async function findOrphans() {
+    const sb = supabase();
+    const [maps, tokens, items, camp] = await Promise.all([
+      sb.from("maps").select("asset_id").eq("campaign_id", campaignId).not("asset_id", "is", null),
+      sb.from("tokens").select("asset_id").not("asset_id", "is", null),
+      sb.from("items").select("asset_id").eq("campaign_id", campaignId).not("asset_id", "is", null),
+      sb.from("campaigns").select("scene").eq("id", campaignId).maybeSingle(),
+    ]);
+    const referenced = new Set<string>();
+    for (const rows of [maps.data, tokens.data, items.data]) {
+      for (const r of (rows as { asset_id: string }[] | null) ?? []) referenced.add(r.asset_id);
+    }
+    const sceneUrl = (camp.data as { scene?: { imageUrl?: string } } | null)?.scene?.imageUrl ?? "";
+    setOrphans(
+      new Set(
+        assets
+          .filter((a) => !referenced.has(a.id) && !(sceneUrl && sceneUrl.includes(a.storage_path)))
+          .map((a) => a.id),
+      ),
+    );
+    setFilter("orphans");
+  }
+
+  const shown =
+    filter === "all"
+      ? assets
+      : filter === "orphans"
+        ? assets.filter((a) => orphans?.has(a.id))
+        : assets.filter((a) => a.kind === filter);
 
   return (
     <section className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
@@ -192,7 +223,19 @@ export function AssetLibrary({ campaignId }: { campaignId: string }) {
             {k === "all" ? `All (${assets.length})` : `${ASSET_KIND_LABELS[k]} (${assets.filter((a) => a.kind === k).length})`}
           </button>
         ))}
+        <button
+          onClick={findOrphans}
+          title="List images nothing references (no map, token, item, or Area feed) — safe to delete"
+          className={`rounded-full border px-2 py-0.5 ${
+            filter === "orphans" ? "border-amber-600 text-amber-300" : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
+          }`}
+        >
+          🧽 Orphans{filter === "orphans" && orphans ? ` (${orphans.size})` : ""}
+        </button>
       </div>
+      {filter === "orphans" && orphans && orphans.size === 0 && (
+        <p className="mb-2 text-xs text-emerald-400">No orphans — every image is in use.</p>
+      )}
 
       {/* Grid */}
       {loading && <p className="text-xs text-zinc-500">Loading…</p>}

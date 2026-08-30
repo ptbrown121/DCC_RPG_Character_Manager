@@ -9,6 +9,7 @@ import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
 import { DrawingCapture, DrawingLayer, PEN_COLORS, useMapDrawings } from "./Drawing";
 import { AoeLayer, MapDropZone, useMapAoe } from "./Aoe";
+import { PingLayer, useMapMeta, type MapMetaApi } from "./MapMeta";
 import { MapStage, StageTransformContext } from "./MapStage";
 import type { AoeMarker, AssetRow, MapGrid, MapRow, TokenRow } from "@/lib/types";
 
@@ -341,11 +342,14 @@ export function MapTokensPanel({
   backgroundAsset,
   assets,
   party,
+  meta,
 }: {
   map: MapRow;
   backgroundAsset: AssetRow | undefined;
   assets: Record<string, AssetRow>;
   party: { id: string; name: string }[];
+  /** Live meta channel (grid pushes + pings) — owned by MapEditor. */
+  meta?: MapMetaApi;
 }) {
   const { user } = useUser();
   const { tokens, missing, dragMove, dragEnd, addToken, patchToken, deleteToken } = useMapTokens(map.id);
@@ -436,6 +440,7 @@ export function MapTokensPanel({
           height={mapH}
           grid={map.grid}
           className="h-80 w-full rounded border border-zinc-800"
+          onPing={meta?.sendPing}
         >
           <DrawingLayer strokes={strokes} live={[remoteLive]} erase={tool === "erase"} onErase={removeStroke} />
           <AoeLayer
@@ -455,6 +460,7 @@ export function MapTokensPanel({
             onDrag={dragMove}
             onDragEnd={dragEnd}
           />
+          {meta && <PingLayer pings={meta.pings} grid={map.grid} />}
           {tool === "pen" && (
             <DrawingCapture
               width={mapW}
@@ -605,6 +611,8 @@ function ActiveMapStageInner({
   const { tokens, dragMove, dragEnd } = useMapTokens(mapId);
   const { strokes, remoteLive } = useMapDrawings(map);
   const aoe = useMapAoe(map);
+  // Live grid/name pushes from the GM's editor + table pings.
+  const meta = useMapMeta(mapId, (patch) => setMap((prev) => (prev ? { ...prev, ...patch } : prev)));
 
   useEffect(() => {
     let cancelled = false;
@@ -684,7 +692,7 @@ function ActiveMapStageInner({
       <div className="flex items-baseline gap-2 border-b border-emerald-900/50 px-3 py-1">
         <span className="font-display text-[10px] tracking-[0.3em] text-emerald-400">▚ TACTICAL MAP ▞</span>
         {map && <span className="truncate text-[10px] text-zinc-500">{map.name}</span>}
-        <span className="ml-auto text-[9px] text-zinc-600">drag to pan · scroll to zoom</span>
+        <span className="ml-auto text-[9px] text-zinc-600">drag to pan · scroll/pinch to zoom · ⇧click to ping</span>
       </div>
       {failed ? (
         <p className="px-3 py-6 text-center text-xs text-zinc-600">
@@ -699,6 +707,7 @@ function ActiveMapStageInner({
               height={bg?.height ?? 1000}
               grid={map.grid}
               className="h-[65vh] w-full"
+              onPing={meta.sendPing}
             >
               <DrawingLayer strokes={strokes} live={[remoteLive]} />
               <AoeLayer
@@ -717,6 +726,7 @@ function ActiveMapStageInner({
                 onDrag={dragMove}
                 onDragEnd={dragEnd}
               />
+              <PingLayer pings={meta.pings} grid={map.grid} />
             </MapStage>
           </div>
         </MapDropZone>

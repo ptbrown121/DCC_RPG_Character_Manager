@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
 import { MapTokensPanel } from "./Tokens";
+import { useMapMeta, type MapLivePatch } from "./MapMeta";
 import type { AssetRow, Campaign, MapGrid, MapRow } from "@/lib/types";
 
 export const DEFAULT_GRID: MapGrid = { ftPerSquare: 5, pxPerSquare: 100, offsetX: 0, offsetY: 0, show: true };
@@ -69,6 +70,39 @@ function GridEditor({ map, onPatch }: { map: MapRow; onPatch: (patch: Partial<Ma
         <input type="checkbox" checked={g.show} onChange={(e) => set({ show: e.target.checked })} />
         show grid
       </label>
+    </div>
+  );
+}
+
+/** Expanded editor for one map. Owns the `mapmeta:<mapId>` channel: grid and
+ * name edits push live to open player sheets (no reload), pings ride it too. */
+function MapEditor({
+  map,
+  asset,
+  assets,
+  party,
+  onPatch,
+}: {
+  map: MapRow;
+  asset: AssetRow | undefined;
+  assets: Record<string, AssetRow>;
+  party: { id: string; name: string }[];
+  onPatch: (patch: Partial<MapRow>) => void;
+}) {
+  const meta = useMapMeta(map.id);
+  return (
+    <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
+      <GridEditor
+        map={map}
+        onPatch={(patch) => {
+          onPatch(patch);
+          const live: MapLivePatch = {};
+          if (patch.grid) live.grid = patch.grid;
+          if (patch.name !== undefined) live.name = patch.name;
+          if (Object.keys(live).length > 0) meta.sendPatch(live);
+        }}
+      />
+      <MapTokensPanel map={map} backgroundAsset={asset} assets={assets} party={party} meta={meta} />
     </div>
   );
 }
@@ -226,10 +260,13 @@ export function MapManager({
                 </span>
               </div>
               {openId === m.id && (
-                <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
-                  <GridEditor map={m} onPatch={(patch) => patchMap(m.id, patch)} />
-                  <MapTokensPanel map={m} backgroundAsset={asset} assets={assets} party={party} />
-                </div>
+                <MapEditor
+                  map={m}
+                  asset={asset}
+                  assets={assets}
+                  party={party}
+                  onPatch={(patch) => patchMap(m.id, patch)}
+                />
               )}
             </li>
           );

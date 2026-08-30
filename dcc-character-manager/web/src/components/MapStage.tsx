@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useEffect, useId, useRef, useState } from "react";
-import { fitTransform, pan, zoomAt, type StageTransform } from "@/lib/stage";
+import { fitTransform, pan, screenToMap, zoomAt, type StageTransform } from "@/lib/stage";
 import type { MapGrid } from "@/lib/types";
 
 const ZOOM_BTN =
@@ -53,6 +53,7 @@ export function MapStage({
   grid,
   children,
   className = "",
+  onPing,
 }: {
   imageUrl: string | null;
   /** Map image size in px — the map coordinate space. */
@@ -61,6 +62,8 @@ export function MapStage({
   grid: MapGrid;
   children?: React.ReactNode;
   className?: string;
+  /** Shift+click anywhere on the map — "look HERE" (map coordinates). */
+  onPing?: (mapX: number, mapY: number) => void;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +74,9 @@ export function MapStage({
   // Once the user pans/zooms, container resizes stop re-fitting under them.
   const touched = useRef(false);
   const drag = useRef<{ pointerId: number; lastX: number; lastY: number } | null>(null);
+  // Touch support: all active pointers on the stage; two of them = pinch.
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinch = useRef<{ d: number; mx: number; my: number } | null>(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -128,9 +134,27 @@ export function MapStage({
     setT((prev) => (prev ? zoomAt(prev, view.w / 2, view.h / 2, factor, fitK.current) : prev));
   }
 
+  function pinchState(): { d: number; mx: number; my: number } | null {
+    if (pointers.current.size !== 2 || !wrapRef.current) return null;
+    const [a, b] = [...pointers.current.values()];
+    const rect = wrapRef.current.getBoundingClientRect();
+    return {
+      d: Math.hypot(a.x - b.x, a.y - b.y),
+      mx: (a.x + b.x) / 2 - rect.left,
+      my: (a.y + b.y) / 2 - rect.top,
+    };
+  }
+
   function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
-    if (e.button !== 0 && e.button !== 1) return;
-    drag.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
+    if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 1) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      // Second finger down → switch from pan to pinch.
+      drag.current = null;
+      pinch.current = pinchState();
+    } else if (pointers.current.size === 1) {
+      drag.current = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
+    }
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -139,6 +163,31 @@ export function MapStage({
   }
 
   function onPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    const p = pointers.current.get(e.pointerId);
+    if (p) {
+      p.x = e.clientX;
+      p.y = e.clientY;
+    }
+    const prevPinch = pinch.current;
+    if (prevPinch) {
+      const now = pinchState();
+      if (now && prevPinch.d > 0 && now.d > 0) {
+        touched.current = true;
+        // Zoom by the distance ratio around the midpoint, then pan by the
+        // midpoint's travel — both fingers moving together drags the map.
+        setT((prev) =>
+          prev
+            ? pan(
+                zoomAt(prev, now.mx, now.my, now.d / prevPinch.d, fitK.current),
+                now.mx - prevPinch.mx,
+                now.my - prevPinch.my,
+              )
+            : prev,
+        );
+        pinch.current = now;
+      }
+      return;
+    }
     const d = drag.current;
     if (!d || d.pointerId !== e.pointerId) return;
     const dx = e.clientX - d.lastX;
@@ -152,7 +201,22 @@ export function MapStage({
   }
 
   function onPointerUp(e: React.PointerEvent<SVGSVGElement>) {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
     if (drag.current?.pointerId === e.pointerId) drag.current = null;
+    if (pointers.current.size === 1 && !drag.current) {
+      // One finger lifted mid-pinch → keep panning with the survivor.
+      const [pid, pos] = [...pointers.current.entries()][0];
+      drag.current = { pointerId: pid, lastX: pos.x, lastY: pos.y };
+    }
+  }
+
+  function onClick(e: React.MouseEvent<SVGSVGElement>) {
+    if (!e.shiftKey || !onPing || !t) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const [mx, my] = screenToMap(t, e.clientX - rect.left, e.clientY - rect.top);
+    if (mx < 0 || my < 0 || mx > width || my > height) return;
+    onPing(mx, my);
   }
 
   return (
@@ -170,6 +234,7 @@ export function MapStage({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={refit}
+        onClick={onClick}
       >
         {t && (
           <g transform={`translate(${t.x} ${t.y}) scale(${t.k})`} data-stage-transform={`${t.x},${t.y},${t.k}`}>

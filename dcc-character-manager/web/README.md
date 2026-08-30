@@ -44,7 +44,7 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0014, in order (0009 also creates the `assets`
+- `supabase/migrations/` — 0001–0015, in order (0009 also creates the `assets`
   storage bucket + its `storage.objects` policies via SQL — no dashboard steps;
   0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
   drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
@@ -112,6 +112,15 @@ truth for any rules question; code comments cite them by section/table.
   own). Live sync rides channel `aoe:<mapId>` (`aoe_add`/`aoe_remove`), late
   joiners read the row; see `Aoe.tsx`. Non-bomb items bounce back; damage
   stays manual — the ring shows where, the GM adjudicates.
+  0015 hardens the maps/assets/tokens owner-all policies: WITH CHECK now
+  also requires `owns_campaign`, so members can't insert their own rows into
+  a GM's campaign (items got the same fix in 0012).
+  Table polish (T13, `MapMeta.tsx`): channel `mapmeta:<mapId>` carries
+  `map_patch` — the GM's grid/name edits recalibrate open player sheets live
+  (no reload) — and `ping`, a shift+click "look HERE" flash anyone can send
+  (expanding amber rings, self-expires). The stage supports touch: one-finger
+  pan, two-finger pinch zoom (midpoint-anchored, pans with the midpoint).
+  The Asset Library gained a 🧽 Orphans sweep (images nothing references).
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
@@ -134,7 +143,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0014` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0015` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`
