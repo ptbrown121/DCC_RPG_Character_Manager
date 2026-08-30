@@ -53,6 +53,12 @@ export function penStrokeWidth(pxPerSquare: number, thick: boolean): number {
   return thick ? thin * 2.5 : thin;
 }
 
+/** Game-feet radius → map-pixel radius via the grid calibration (AoE rings). */
+export function aoeRadiusPx(radiusFt: number, ftPerSquare: number, pxPerSquare: number): number {
+  if (ftPerSquare <= 0) return 0;
+  return (radiusFt / ftPerSquare) * pxPerSquare;
+}
+
 /** Snap a map coordinate to the nearest half-square of the grid. */
 export function snapHalf(v: number, offset: number, pxPerSquare: number): number {
   if (pxPerSquare <= 0) return v;

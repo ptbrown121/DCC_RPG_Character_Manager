@@ -44,7 +44,7 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0013, in order (0009 also creates the `assets`
+- `supabase/migrations/` — 0001–0014, in order (0009 also creates the `assets`
   storage bucket + its `storage.objects` policies via SQL — no dashboard steps;
   0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
   drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
@@ -101,6 +101,17 @@ truth for any rules question; code comments cite them by section/table.
   another tab moved first, so nothing is applied and the panel refetches).
   The last one spent deletes the row and clears its hotbar slot. No-op
   outcomes (already full, nothing to cure) spare the item.
+  0014 is the VTT capstone: `maps.aoe jsonb` blast markers. Dragging a
+  `kind:'bomb'` item from the hotbar/inventory onto the tactical map spawns
+  an amber pulsing ring scaled through the grid (`radiusFt / ftPerSquare ×
+  pxPerSquare`, math in `stage.ts`), item icon at center, effect note in the
+  tooltip, and consumes one (same spend path as T11). Players can't write
+  the GM's map row, so both mutations are SECURITY DEFINER RPCs
+  (`add_aoe_marker` — any campaign member, thrower stamped server-side from
+  auth.uid(); `remove_aoe_marker` — GM removes any, a thrower only their
+  own). Live sync rides channel `aoe:<mapId>` (`aoe_add`/`aoe_remove`), late
+  joiners read the row; see `Aoe.tsx`. Non-bomb items bounce back; damage
+  stays manual — the ring shows where, the GM adjudicates.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
@@ -123,7 +134,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0013` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0014` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`

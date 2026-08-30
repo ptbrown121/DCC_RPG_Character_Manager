@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aoeRadiusPx,
   clampZoom,
   fitTransform,
   mapToScreen,
@@ -57,6 +58,12 @@ describe("coordinate round-trips", () => {
     const [mx, my] = screenToMap(t, sx, sy);
     expect(mx).toBeCloseTo(640);
     expect(my).toBeCloseTo(480);
+  });
+
+  it("aoeRadiusPx converts feet through the grid calibration", () => {
+    expect(aoeRadiusPx(20, 5, 100)).toBe(400); // 20 ft = 4 squares of 100 px
+    expect(aoeRadiusPx(5, 5, 70)).toBe(70);
+    expect(aoeRadiusPx(20, 0, 100)).toBe(0); // degenerate grid
   });
 
   it("penStrokeWidth scales with the grid within clamps", () => {

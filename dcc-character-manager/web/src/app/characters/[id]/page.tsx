@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import AuthGate from "@/components/AuthGate";
 import HbTracker from "@/components/HbTracker";
@@ -50,7 +50,7 @@ import {
   type HudNotification,
   type SystemSend,
 } from "@/components/Hud";
-import { ActiveMapStage } from "@/components/Tokens";
+import { ActiveMapStage, type BombDrop } from "@/components/Tokens";
 import { InventoryItems, useInventory, type InventoryEntry } from "@/components/Items";
 import { Hotbar, HotbarDnd, ItemDrag, SpellDrag } from "@/components/Hotbar";
 import { clearSlot, findEntry, firstFreeSlot, placeEntry, seedHotbar } from "@/lib/hotbar";
@@ -131,6 +131,8 @@ function Sheet() {
   const inv = useInventory(id, invRefresh);
   // A cure-anything consumable waiting for the player to pick a debuff.
   const [curePick, setCurePick] = useState<InventoryEntry | null>(null);
+  // Registered by the tactical map: converts a hotbar bomb drop into a marker.
+  const bombDropRef = useRef<BombDrop | null>(null);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -323,6 +325,30 @@ function Sheet() {
       return;
     }
 
+    if (!(await spendOne(entry))) return;
+
+    if (outcome?.changed) {
+      persist({
+        current_hb_slots: outcome.target.hbSlots,
+        current_mana: outcome.target.mana,
+        debuffs: reconcileDebuffRows(c.debuffs, outcome.target.debuffs),
+      });
+    }
+    notify(
+      "crawler",
+      `You used ${item.name}. ${outcome?.summary ?? "Nothing happens. Probably."}${CONSUME_SNARK[effect?.kind ?? ""] ?? ""}`,
+    );
+  }
+
+  /**
+   * Spend one of an inventory stack: qty −1 with optimistic concurrency (the
+   * write is qualified on the qty we read — zero rows touched means another
+   * tab moved first, so refetch and apply nothing). The last one deletes the
+   * row and clears its hotbar slot. Shared by consumables and bomb throws.
+   */
+  async function spendOne(entry: InventoryEntry): Promise<boolean> {
+    const item = entry.item;
+    if (!item) return false;
     const q =
       entry.row.qty > 1
         ? supabase()
@@ -341,29 +367,51 @@ function Sheet() {
     if (!touched?.length) {
       notify("system", "Inventory desync detected. Recounting your possessions.");
       setInvRefresh((k) => k + 1);
-      return;
-    }
-
-    const patch: Partial<Character> = {};
-    if (outcome?.changed) {
-      patch.current_hb_slots = outcome.target.hbSlots;
-      patch.current_mana = outcome.target.mana;
-      patch.debuffs = reconcileDebuffRows(c.debuffs, outcome.target.debuffs);
+      return false;
     }
     if (entry.row.qty === 1 && bar) {
       const at = findEntry(bar, { type: "item", id: item.id });
-      if (at >= 0) patch.hotbar = clearSlot(bar, at);
+      if (at >= 0) persist({ hotbar: clearSlot(bar, at) });
     }
-    if (Object.keys(patch).length > 0) persist(patch);
     setInvRefresh((k) => k + 1);
-    notify(
-      "crawler",
-      `You used ${item.name}. ${outcome?.summary ?? "Nothing happens. Probably."}${CONSUME_SNARK[effect?.kind ?? ""] ?? ""}`,
-    );
+    return true;
+  }
+
+  /** T12: an item dropped on the tactical map. Bombs blow up; the rest bounce. */
+  async function handleMapDrop(itemId: string, sx: number, sy: number) {
+    const entry = inv.entries?.find((en) => en.item?.id === itemId);
+    const item = entry?.item;
+    if (!entry || !item) return;
+    if (item.kind !== "bomb") {
+      notify("system", `${item.name} bounces off the map and returns to your pack.`);
+      return;
+    }
+    const radiusFt = item.effect?.kind === "aoe" ? item.effect.radiusFt : 10;
+    const note = item.effect?.kind === "aoe" ? item.effect.note : undefined;
+    const status = (await bombDropRef.current?.(sx, sy, {
+      radiusFt,
+      label: item.name,
+      note,
+      assetId: item.asset_id,
+    })) ?? "no-map";
+    if (status !== "ok") {
+      notify(
+        "system",
+        status === "migration"
+          ? "Blast markers need migration 0014. The System apologizes for the inconvenience."
+          : status === "out-of-bounds"
+            ? `${item.name} sails past the edge of the map. Retrieved, barely.`
+            : "No tactical map to deploy on.",
+      );
+      return;
+    }
+    if (await spendOne(entry)) {
+      notify("crawler", `You deployed ${item.name} — ${radiusFt} ft blast zone marked. The System recommends running.`);
+    }
   }
 
   return (
-    <HotbarDnd bar={bar} onChange={(next) => persist({ hotbar: next })}>
+    <HotbarDnd bar={bar} onChange={(next) => persist({ hotbar: next })} onMapDrop={handleMapDrop}>
     <div className="space-y-6 pb-24 pt-12">
       {/* HUD chrome (book default layout: notifications ↖, bars ↗, hotlist ↓, minimap ↘).
           Elements the GM has switched off simply vanish, like the AI took them. */}
@@ -531,7 +579,7 @@ function Sheet() {
         const campaign = campaigns.find((cp) => cp.id === c.campaign_id);
         const activeMapId = liveMapId !== undefined ? liveMapId : (campaign?.active_map_id ?? null);
         return activeMapId ? (
-          <ActiveMapStage mapId={activeMapId} characterId={c.id} />
+          <ActiveMapStage mapId={activeMapId} characterId={c.id} bombDropRef={bombDropRef} />
         ) : (
           <SceneStage scene={liveScene ?? campaign?.scene ?? null} />
         );

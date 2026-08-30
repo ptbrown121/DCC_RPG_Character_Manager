@@ -197,6 +197,22 @@ export interface DrawingStroke {
   points: [number, number][];
 }
 
+/** A blast-zone marker on a map (migration 0014), in map coordinates.
+ * `by` is stamped server-side by add_aoe_marker — it gates removal. */
+export interface AoeMarker {
+  id: string;
+  x: number;
+  y: number;
+  radiusFt: number;
+  /** Item name shown on the marker. */
+  label: string;
+  /** The item effect's note (damage dice etc.) — shown in the tooltip. */
+  note?: string;
+  /** Item icon rendered at the blast center. */
+  assetId?: string | null;
+  by?: string;
+}
+
 /** A tabletop map (migration 0010): asset background + grid + GM drawings. */
 export interface MapRow {
   id: string;
@@ -206,6 +222,8 @@ export interface MapRow {
   asset_id: string | null;
   grid: MapGrid;
   drawings: DrawingStroke[];
+  /** Blast-zone markers. Optional until migration 0014 has been run. */
+  aoe?: AoeMarker[];
   created_at: string;
 }
 

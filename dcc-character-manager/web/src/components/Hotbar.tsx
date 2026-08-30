@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { assetUrl } from "@/lib/upload";
 import { clearSlot, normalizeHotbar, placeEntry, swapSlots } from "@/lib/hotbar";
+import { MAP_DROP_ID } from "./Aoe";
 import { ITEM_KIND_LABELS, RARITY_COLORS, WithItemTooltip, type InventoryEntry } from "./Items";
 import type { HotbarEntry, SpellRow } from "@/lib/types";
 
@@ -39,10 +40,14 @@ type DragData = {
 export function HotbarDnd({
   bar,
   onChange,
+  onMapDrop,
   children,
 }: {
   bar: HotbarEntry[] | null;
   onChange: (next: HotbarEntry[]) => void;
+  /** An item was dropped on the tactical map (MapDropZone) at these screen
+   * coords — bombs deploy there (T12); anything else bounces back. */
+  onMapDrop?: (itemId: string, screenX: number, screenY: number) => void;
   children: ReactNode;
 }) {
   const [active, setActive] = useState<DragData | null>(null);
@@ -64,6 +69,16 @@ export function HotbarDnd({
         if (data.from !== to) onChange(swapSlots(bar, data.from, to));
       } else {
         onChange(placeEntry(bar, to, data.entry));
+      }
+    } else if (overId === MAP_DROP_ID) {
+      // Dropping on the map is a *use*, never a slot clear. The drop point is
+      // the activating pointer position plus the total drag translation.
+      if (data.entry.type === "item" && onMapDrop && e.activatorEvent instanceof PointerEvent) {
+        onMapDrop(
+          data.entry.id,
+          e.activatorEvent.clientX + e.delta.x,
+          e.activatorEvent.clientY + e.delta.y,
+        );
       }
     } else if (data.from !== undefined) {
       // Dropped off the bar entirely → clear the slot.

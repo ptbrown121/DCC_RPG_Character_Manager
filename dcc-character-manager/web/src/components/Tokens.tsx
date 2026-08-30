@@ -8,8 +8,9 @@ import { penStrokeWidth, snapHalf } from "@/lib/stage";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
 import { DrawingCapture, DrawingLayer, PEN_COLORS, useMapDrawings } from "./Drawing";
+import { AoeLayer, MapDropZone, useMapAoe } from "./Aoe";
 import { MapStage, StageTransformContext } from "./MapStage";
-import type { AssetRow, MapGrid, MapRow, TokenRow } from "@/lib/types";
+import type { AoeMarker, AssetRow, MapGrid, MapRow, TokenRow } from "@/lib/types";
 
 /*
  * Tabletop tokens (migration 0011). Realtime rides `map:<mapId>`:
@@ -349,6 +350,7 @@ export function MapTokensPanel({
   const { user } = useUser();
   const { tokens, missing, dragMove, dragEnd, addToken, patchToken, deleteToken } = useMapTokens(map.id);
   const { strokes, remoteLive, progress, commit, removeStroke, clearAll } = useMapDrawings(map);
+  const aoe = useMapAoe(map);
   const [snap, setSnap] = useState(true);
   const [picker, setPicker] = useState(false);
   const [tool, setTool] = useState<"move" | "pen" | "erase">("move");
@@ -436,6 +438,13 @@ export function MapTokensPanel({
           className="h-80 w-full rounded border border-zinc-800"
         >
           <DrawingLayer strokes={strokes} live={[remoteLive]} erase={tool === "erase"} onErase={removeStroke} />
+          <AoeLayer
+            markers={aoe.markers}
+            grid={map.grid}
+            assets={assets}
+            canRemove={() => tool === "move"}
+            onRemove={aoe.removeMarker}
+          />
           <TokenLayer
             tokens={tokens}
             grid={map.grid}
@@ -472,6 +481,7 @@ export function MapTokensPanel({
           snap to grid
         </label>
         {missing && <span className="text-amber-400">Run migration 0011 to enable tokens.</span>}
+        {!aoe.enabled && <span className="text-amber-400">Run migration 0014 to enable blast markers.</span>}
       </div>
 
       {tokens.length > 0 && (
@@ -555,18 +565,46 @@ export function MapTokensPanel({
  * this crawler; everything else is read-only. The GM flipping the active map
  * is heard over `map_state` by the sheet, which just swaps `mapId` here.
  */
-export function ActiveMapStage({ mapId, characterId }: { mapId: string; characterId?: string }) {
+/** Sheet → map bridge for bomb throws: the sheet resolves the hotbar drop,
+ * this converts screen coords and spawns the marker. Registered via ref
+ * because the stage transform lives inside MapStage's DOM. */
+export type BombDrop = (
+  screenX: number,
+  screenY: number,
+  bomb: { radiusFt: number; label: string; note?: string; assetId?: string | null },
+) => Promise<"ok" | "no-map" | "migration" | "out-of-bounds" | "failed">;
+
+export function ActiveMapStage({
+  mapId,
+  characterId,
+  bombDropRef,
+}: {
+  mapId: string;
+  characterId?: string;
+  bombDropRef?: React.MutableRefObject<BombDrop | null>;
+}) {
   // Keyed remount resets the fetch state whenever the GM switches maps.
-  return <ActiveMapStageInner key={mapId} mapId={mapId} characterId={characterId} />;
+  return <ActiveMapStageInner key={mapId} mapId={mapId} characterId={characterId} bombDropRef={bombDropRef} />;
 }
 
-function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterId?: string }) {
+function ActiveMapStageInner({
+  mapId,
+  characterId,
+  bombDropRef,
+}: {
+  mapId: string;
+  characterId?: string;
+  bombDropRef?: React.MutableRefObject<BombDrop | null>;
+}) {
+  const { user } = useUser();
   const [map, setMap] = useState<MapRow | null>(null);
   const [assets, setAssets] = useState<Record<string, AssetRow>>({});
   const [failed, setFailed] = useState(false);
   const fetchedAssetIds = useRef<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
   const { tokens, dragMove, dragEnd } = useMapTokens(mapId);
   const { strokes, remoteLive } = useMapDrawings(map);
+  const aoe = useMapAoe(map);
 
   useEffect(() => {
     let cancelled = false;
@@ -587,6 +625,7 @@ function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterI
     const wanted = new Set<string>();
     if (map?.asset_id) wanted.add(map.asset_id);
     for (const t of tokens) if (t.asset_id) wanted.add(t.asset_id);
+    for (const m of aoe.markers) if (m.assetId) wanted.add(m.assetId);
     const ids = [...wanted].filter((id) => !fetchedAssetIds.current.has(id));
     if (ids.length === 0) return;
     ids.forEach((id) => fetchedAssetIds.current.add(id));
@@ -598,9 +637,47 @@ function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterI
         const rows = (data as AssetRow[]) ?? [];
         if (rows.length > 0) setAssets((prev) => ({ ...prev, ...Object.fromEntries(rows.map((a) => [a.id, a])) }));
       });
-  }, [map, tokens]);
+  }, [map, tokens, aoe.markers]);
 
   const bg = map?.asset_id ? assets[map.asset_id] : undefined;
+
+  // Bomb throws land here from the sheet's HotbarDnd. Screen → map goes
+  // through the DOM (data-stage-transform on MapStage's transformed <g>) —
+  // the pan/zoom state is internal to MapStage. Re-registered every render
+  // so the closure always sees fresh map/aoe state.
+  useEffect(() => {
+    if (!bombDropRef) return;
+    const ref = bombDropRef;
+    ref.current = async (sx, sy, bomb) => {
+      if (!map) return "no-map";
+      if (!aoe.enabled) return "migration";
+      const g = containerRef.current?.querySelector("[data-stage-transform]");
+      const svg = g?.closest("svg");
+      const parts = g?.getAttribute("data-stage-transform")?.split(",").map(Number);
+      if (!g || !svg || !parts || parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return "no-map";
+      const [tx, ty, k] = parts;
+      const rect = svg.getBoundingClientRect();
+      const x = (sx - rect.left - tx) / k;
+      const y = (sy - rect.top - ty) / k;
+      const w = bg?.width ?? 1000;
+      const h = bg?.height ?? 1000;
+      if (x < 0 || y < 0 || x > w || y > h) return "out-of-bounds";
+      const marker: AoeMarker = {
+        id: crypto.randomUUID(),
+        x,
+        y,
+        radiusFt: bomb.radiusFt,
+        label: bomb.label,
+        ...(bomb.note ? { note: bomb.note } : {}),
+        ...(bomb.assetId ? { assetId: bomb.assetId } : {}),
+        by: user?.id,
+      };
+      return (await aoe.addMarker(marker)) ? "ok" : "failed";
+    };
+    return () => {
+      ref.current = null;
+    };
+  });
 
   return (
     <section className="overflow-hidden rounded-lg border border-emerald-900 bg-zinc-950">
@@ -614,24 +691,35 @@ function ActiveMapStageInner({ mapId, characterId }: { mapId: string; characterI
           Map feed unavailable — it may have been deleted, or you are not in this campaign.
         </p>
       ) : map ? (
-        <MapStage
-          imageUrl={bg ? assetUrl(bg.storage_path) : null}
-          width={bg?.width ?? 1000}
-          height={bg?.height ?? 1000}
-          grid={map.grid}
-          className="h-[65vh] w-full"
-        >
-          <DrawingLayer strokes={strokes} live={[remoteLive]} />
-          <TokenLayer
-            tokens={tokens}
-            grid={map.grid}
-            snap
-            canMove={(t) => !!characterId && t.character_id === characterId}
-            assets={assets}
-            onDrag={dragMove}
-            onDragEnd={dragEnd}
-          />
-        </MapStage>
+        <MapDropZone>
+          <div ref={containerRef}>
+            <MapStage
+              imageUrl={bg ? assetUrl(bg.storage_path) : null}
+              width={bg?.width ?? 1000}
+              height={bg?.height ?? 1000}
+              grid={map.grid}
+              className="h-[65vh] w-full"
+            >
+              <DrawingLayer strokes={strokes} live={[remoteLive]} />
+              <AoeLayer
+                markers={aoe.markers}
+                grid={map.grid}
+                assets={assets}
+                canRemove={(m) => !!user && m.by === user.id}
+                onRemove={aoe.removeMarker}
+              />
+              <TokenLayer
+                tokens={tokens}
+                grid={map.grid}
+                snap
+                canMove={(t) => !!characterId && t.character_id === characterId}
+                assets={assets}
+                onDrag={dragMove}
+                onDragEnd={dragEnd}
+              />
+            </MapStage>
+          </div>
+        </MapDropZone>
       ) : (
         <p className="px-3 py-6 text-center text-xs text-zinc-600">Establishing map feed…</p>
       )}
