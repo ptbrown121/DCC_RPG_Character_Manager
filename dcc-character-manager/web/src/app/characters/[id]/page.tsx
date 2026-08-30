@@ -20,6 +20,7 @@ import {
   statCheckDifficulty,
   REST_RULES,
   DEBUFFS,
+  describeItemEffect,
   roundDown,
   RANK_CAP_EARLY,
   RANK_CAP_ABSOLUTE,
@@ -48,7 +49,10 @@ import {
   type SystemSend,
 } from "@/components/Hud";
 import { ActiveMapStage } from "@/components/Tokens";
-import { InventoryItems } from "@/components/Items";
+import { InventoryItems, useInventory, type InventoryEntry } from "@/components/Items";
+import { Hotbar, HotbarDnd, ItemDrag, SpellDrag } from "@/components/Hotbar";
+import { clearSlot, findEntry, firstFreeSlot, placeEntry, seedHotbar } from "@/lib/hotbar";
+import type { HotbarEntry } from "@/lib/types";
 import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -115,6 +119,7 @@ function Sheet() {
   const [liveMapId, setLiveMapId] = useState<string | null | undefined>(undefined);
   // Bumped when the GM grants an item so an open inventory panel refetches.
   const [invRefresh, setInvRefresh] = useState(0);
+  const inv = useInventory(id, invRefresh);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -226,6 +231,19 @@ function Sheet() {
     notify("crawler", `Cast ${sp.name} (−${sp.mana} Mana).`);
   }
 
+  /** Click behavior for item slots (T10): consumables activate in T11, bombs deploy in T12. */
+  function useItemFromBar(entry: InventoryEntry) {
+    const item = entry.item;
+    if (!item) return;
+    if (item.kind === "bomb") {
+      notify("system", `${item.name}: deployment requires the tactical map. Patience, crawler.`);
+    } else if (item.kind === "consumable") {
+      notify("system", `${item.name} rattles expectantly. Consuming arrives with the next System patch.`);
+    } else {
+      notify("crawler", `${item.name}: ${describeItemEffect(item.effect)}`);
+    }
+  }
+
   function shortRest() {
     if (!c) return;
     persist({
@@ -247,8 +265,13 @@ function Sheet() {
     ? hoursRemaining(activeFloor.collapse_days, activeFloor.hours_elapsed)
     : null;
   const hotlisted = c.spells.filter((s) => s.hotlist);
+  // Unified hotbar view (0013): seeded from hotlist flags while the stored bar
+  // is empty; the seed persists with the first bar mutation (drag or ★). Null
+  // until the migration ran → the old spells-only Hotlist stays as fallback.
+  const bar = c.hotbar !== undefined ? seedHotbar(c.hotbar, c.spells) : null;
 
   return (
+    <HotbarDnd bar={bar} onChange={(next) => persist({ hotbar: next })}>
     <div className="space-y-6 pb-24 pt-12">
       {/* HUD chrome (book default layout: notifications ↖, bars ↗, hotlist ↓, minimap ↘).
           Elements the GM has switched off simply vanish, like the AI took them. */}
@@ -326,9 +349,19 @@ function Sheet() {
           </div>
         </HudBars>
       )}
-      {!hudHidden.includes("hotlist") && (
-        <Hotlist spells={hotlisted} mana={c.current_mana} onCast={castSpell} />
-      )}
+      {!hudHidden.includes("hotlist") &&
+        (bar ? (
+          <Hotbar
+            bar={bar}
+            spells={c.spells}
+            inventory={inv.entries ?? []}
+            mana={c.current_mana}
+            onCast={castSpell}
+            onUseItem={useItemFromBar}
+          />
+        ) : (
+          <Hotlist spells={hotlisted} mana={c.current_mana} onCast={castSpell} />
+        ))}
       {!hudHidden.includes("minimap") && (
         <Minimap floor={c.floor} label={campaigns.find((cp) => cp.id === c.campaign_id)?.name ?? null} />
       )}
@@ -409,22 +442,38 @@ function Sheet() {
               label: "✨ SPELLS",
               content: (
                 <ul className="space-y-1 text-sm">
-                  {c.spells.map((sp, i) => (
+                  {c.spells.map((sp, i) => {
+                    const onBar = bar
+                      ? findEntry(bar, { type: "spell", id: sp.name }) >= 0
+                      : !!sp.hotlist;
+                    return (
                     <li key={`${sp.name}-${i}`} className="flex items-center justify-between gap-2">
-                      <span>
-                        {sp.name}
-                        <span className="ml-2 text-xs text-zinc-500">R{sp.rank} · {sp.mana}mp · {sp.effect}</span>
-                      </span>
+                      <SpellDrag spell={sp}>
+                        <span>
+                          {sp.name}
+                          <span className="ml-2 text-xs text-zinc-500">R{sp.rank} · {sp.mana}mp · {sp.effect}</span>
+                        </span>
+                      </SpellDrag>
                       <span className="flex items-center gap-2">
                         <button
                           onClick={() => {
-                            if (!sp.hotlist && hotlisted.length >= 10) return;
-                            persist({ spells: c.spells.map((s, j) => (j === i ? { ...s, hotlist: !s.hotlist } : s)) });
+                            if (bar) {
+                              const entry: NonNullable<HotbarEntry> = { type: "spell", id: sp.name };
+                              const at = findEntry(bar, entry);
+                              if (at >= 0) persist({ hotbar: clearSlot(bar, at) });
+                              else {
+                                const free = firstFreeSlot(bar);
+                                if (free >= 0) persist({ hotbar: placeEntry(bar, free, entry) });
+                              }
+                            } else {
+                              if (!sp.hotlist && hotlisted.length >= 10) return;
+                              persist({ spells: c.spells.map((s, j) => (j === i ? { ...s, hotlist: !s.hotlist } : s)) });
+                            }
                           }}
-                          className={sp.hotlist ? "text-amber-400" : "text-zinc-600 hover:text-amber-400"}
-                          title="Toggle Hotlist"
+                          className={onBar ? "text-amber-400" : "text-zinc-600 hover:text-amber-400"}
+                          title={onBar ? "Remove from hotbar" : "Add to hotbar (or drag it onto a slot)"}
                         >
-                          {sp.hotlist ? "★" : "☆"}
+                          {onBar ? "★" : "☆"}
                         </button>
                         <button
                           disabled={c.current_mana < sp.mana}
@@ -435,7 +484,8 @@ function Sheet() {
                         </button>
                       </span>
                     </li>
-                  ))}
+                    );
+                  })}
                   {c.spells.length === 0 && <li className="text-xs text-zinc-500">No spells known.</li>}
                 </ul>
               ),
@@ -445,7 +495,7 @@ function Sheet() {
               label: "🎒 INVENTORY",
               content: (
                 <div className="space-y-2 text-sm">
-                  <InventoryItems characterId={id} refresh={invRefresh} />
+                  <InventoryItems entries={inv.entries} missing={inv.missing} DragWrap={ItemDrag} />
                   <div className="flex items-center gap-3 border-t border-zinc-800 pt-2">
                     <span>
                       Gold <b className="font-display">{c.gold}</b>
@@ -956,6 +1006,7 @@ function Sheet() {
       </section>
       )}
     </div>
+    </HotbarDnd>
   );
 }
 

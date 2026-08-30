@@ -643,16 +643,16 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
 
 /* ---------- Player inventory (🎒 rail panel on the sheet) ---------- */
 
-interface InventoryEntry {
+export interface InventoryEntry {
   row: CharacterItemRow;
   /** Null when the GM deleted the catalog item (or the campaign link broke). */
   item: ItemRow | null;
   asset: AssetRow | null;
 }
 
-/** The crawler's granted items with icons, qty badges, and tooltips. Gold,
- * junk and loot boxes stay with the sheet; this only renders catalog items. */
-export function InventoryItems({ characterId, refresh = 0 }: { characterId: string; refresh?: number }) {
+/** Fetch a crawler's inventory with item + icon rows joined client-side.
+ * `refresh` bumps refetch (item_grant pings); entries null = still loading. */
+export function useInventory(characterId: string, refresh = 0) {
   const [entries, setEntries] = useState<InventoryEntry[] | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -695,39 +695,59 @@ export function InventoryItems({ characterId, refresh = 0 }: { characterId: stri
     };
   }, [characterId, refresh]);
 
+  return { entries, missing };
+}
+
+/** The crawler's granted items with icons, qty badges, and tooltips. Gold,
+ * junk and loot boxes stay with the sheet; this only renders catalog items.
+ * `DragWrap` (Hotbar's ItemDrag) makes rows draggable onto the hotbar. */
+export function InventoryItems({
+  entries,
+  missing,
+  DragWrap,
+}: {
+  entries: InventoryEntry[] | null;
+  missing: boolean;
+  DragWrap?: (props: { entry: InventoryEntry; children: ReactNode }) => ReactNode;
+}) {
   if (missing) {
     return <p className="text-xs text-amber-400">Run migration 0013 to enable the item inventory.</p>;
   }
   if (entries === null) return <p className="text-xs text-zinc-500">Loading…</p>;
   return (
     <ul className="space-y-1 text-sm">
-      {entries.map(({ row, item, asset }) => (
-        <li key={row.id}>
-          {item ? (
-            <WithItemTooltip item={item} asset={asset} className="flex cursor-default items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800/60 focus:bg-zinc-800/60 focus:outline-none">
-              {asset ? (
-                <img
-                  src={assetUrl(asset.storage_path)}
-                  alt=""
-                  className="h-6 w-6 rounded border border-zinc-800 bg-zinc-950 object-contain"
-                />
-              ) : (
-                <span className="flex h-6 w-6 items-center justify-center text-xs">
-                  {ITEM_KIND_LABELS[item.kind].split(" ")[0]}
-                </span>
-              )}
-              <span style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</span>
-              {row.qty > 1 && (
-                <span className="rounded-full border border-zinc-700 px-1.5 text-[10px] text-zinc-400">
-                  ×{row.qty}
-                </span>
-              )}
-            </WithItemTooltip>
-          ) : (
-            <span className="text-xs text-zinc-600 line-through">(item removed from the catalog) ×{row.qty}</span>
-          )}
-        </li>
-      ))}
+      {entries.map((e) => {
+        const { row, item, asset } = e;
+        if (!item) {
+          return (
+            <li key={row.id}>
+              <span className="text-xs text-zinc-600 line-through">(item removed from the catalog) ×{row.qty}</span>
+            </li>
+          );
+        }
+        const inner = (
+          <WithItemTooltip item={item} asset={asset} className="flex cursor-default items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800/60 focus:bg-zinc-800/60 focus:outline-none">
+            {asset ? (
+              <img
+                src={assetUrl(asset.storage_path)}
+                alt=""
+                className="h-6 w-6 rounded border border-zinc-800 bg-zinc-950 object-contain"
+              />
+            ) : (
+              <span className="flex h-6 w-6 items-center justify-center text-xs">
+                {ITEM_KIND_LABELS[item.kind].split(" ")[0]}
+              </span>
+            )}
+            <span style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</span>
+            {row.qty > 1 && (
+              <span className="rounded-full border border-zinc-700 px-1.5 text-[10px] text-zinc-400">
+                ×{row.qty}
+              </span>
+            )}
+          </WithItemTooltip>
+        );
+        return <li key={row.id}>{DragWrap ? <DragWrap entry={e}>{inner}</DragWrap> : inner}</li>;
+      })}
       {entries.length === 0 && (
         <li className="text-xs text-zinc-500">No items. The System will provide. Probably.</li>
       )}

@@ -85,7 +85,15 @@ truth for any rules question; code comments cite them by section/table.
   System snark) and an `item_grant` ping on `hud:character:<id>` so an open
   sheet's 🎒 INVENTORY panel refetches; `InventoryItems` renders icons,
   rarity-colored names, qty badges, and the shared `WithItemTooltip` HUD card
-  (pointer-following, edge-flipped, keyboard-focusable).
+  (pointer-following, edge-flipped, keyboard-focusable). The sheet's 10-slot
+  Hotlist became the unified **hotbar** (`Hotbar.tsx` + pure slot math in
+  `src/lib/hotbar.ts`, tested): spells and items share `characters.hotbar`
+  (seeded once from the old `SpellRow.hotlist` flags, now deprecated), dragged
+  via dnd-kit (`pointerWithin` collision so drops land at the cursor, not by
+  rect overlap) from the spell/inventory rail panels onto slots, slot ⇄ slot
+  to swap, off the bar to clear. Slot clicks: spells cast, consumables
+  activate (T11), bombs deploy to the map (T12); pre-0013 sheets fall back to
+  the old spells-only Hotlist.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
