@@ -11,3 +11,4 @@ export * from "./catalog/raceclassData";
 export * from "./campaign";
 export * from "./social";
 export * from "./assets";
+export * from "./items";

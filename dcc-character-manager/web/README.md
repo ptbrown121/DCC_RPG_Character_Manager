@@ -44,7 +44,7 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0010, in order (0009 also creates the `assets`
+- `supabase/migrations/` — 0001–0012, in order (0009 also creates the `assets`
   storage bucket + its `storage.objects` policies via SQL — no dashboard steps;
   0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
   drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
@@ -69,6 +69,14 @@ truth for any rules question; code comments cite them by section/table.
   Live sync uses channel `draw:<mapId>` (`draw_progress` streams the stroke
   while the pen is down so the party watches it appear, plus `draw_commit` /
   `draw_remove` / `draw_clear`); players are render-only.
+  0012 adds the `items` catalog (GM-authored loot: icon asset, kind, rarity,
+  stackable, and an `effect` jsonb — heal_slots / restore_mana / cure_debuff /
+  aoe / custom — executed only by `applyItemEffect` in the rules engine, never
+  re-derived in the UI; `Items.tsx` is the ⚗ ITEMS editor on the campaign page
+  with the rarity color scale tooltips and inventory reuse). Members read the
+  catalog; only the campaign owner writes (the policy's `with check` requires
+  `owns_campaign`, so members can't insert rows into the GM's catalog).
+  Inventory + grants (0013) build on this.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
@@ -91,7 +99,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0010` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0012` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`

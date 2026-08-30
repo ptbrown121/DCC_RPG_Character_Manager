@@ -105,14 +105,20 @@ export function AssetLibrary({ campaignId }: { campaignId: string }) {
   }
 
   async function remove(asset: AssetRow) {
-    // Warn if any map uses this image as its background (the map would go blank).
-    const { count } = await supabase()
-      .from("maps")
-      .select("id", { count: "exact", head: true })
-      .eq("asset_id", asset.id);
-    const inUse = count
-      ? ` ⚠ ${count} map${count === 1 ? "" : "s"} use${count === 1 ? "s" : ""} this image as a background and will go blank.`
-      : "";
+    // Warn if anything references this image (those pieces would go blank).
+    // Pre-migration tables just error → count null → no warning, harmless.
+    const sb = supabase();
+    const [maps, tokens, items] = await Promise.all(
+      (["maps", "tokens", "items"] as const).map((table) =>
+        sb.from(table).select("id", { count: "exact", head: true }).eq("asset_id", asset.id),
+      ),
+    );
+    const refs = [
+      maps.count ? `${maps.count} map(s)` : null,
+      tokens.count ? `${tokens.count} token(s)` : null,
+      items.count ? `${items.count} item(s)` : null,
+    ].filter(Boolean);
+    const inUse = refs.length ? ` ⚠ In use by ${refs.join(", ")} — they will lose this image.` : "";
     if (!window.confirm(`Delete “${asset.name}”? The image is removed from storage too.${inUse}`)) return;
     try {
       await deleteAsset(asset);

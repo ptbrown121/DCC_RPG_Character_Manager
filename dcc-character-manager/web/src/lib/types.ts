@@ -1,4 +1,4 @@
-import type { StatLayers, StatScores } from "./rules";
+import type { ItemEffect, ItemKind, ItemRarity, StatLayers, StatScores } from "./rules";
 
 export interface SkillRow {
   name: string;
@@ -220,6 +220,23 @@ export interface TokenRow {
   /** Linked crawler — that player may drag this token (move_token RPC). */
   character_id: string | null;
   z: number;
+  created_at: string;
+}
+
+/** A GM-authored catalog item (migration 0012). `effect` is the D7 union
+ * executed only by the rules engine (`applyItemEffect`). */
+export interface ItemRow {
+  id: string;
+  campaign_id: string;
+  owner_id: string;
+  name: string;
+  description: string;
+  /** Icon image; shown in the catalog, tooltips (T9), and hotbar slots (T10). */
+  asset_id: string | null;
+  kind: ItemKind;
+  rarity: ItemRarity;
+  stackable: boolean;
+  effect: ItemEffect | null;
   created_at: string;
 }
 

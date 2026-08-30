@@ -20,6 +20,7 @@ import VehiclesPanel from "@/components/VehiclesPanel";
 import { GmSendPanel } from "@/components/Hud";
 import { AssetLibrary } from "@/components/AssetLibrary";
 import { MapManager } from "@/components/MapManager";
+import { ItemsPanel } from "@/components/Items";
 import type { AchievementEntry, Campaign, CampaignArea, CampaignFloor, CampaignMember, Character, Encounter } from "@/lib/types";
 
 /** Client-generated 6-char invite code (collision odds are cosmic; column is unique anyway). */
@@ -368,6 +369,9 @@ function CampaignPage() {
 
       {/* Tabletop maps: create from an asset, calibrate the grid, set active for the party */}
       {isGm && <MapManager campaign={campaign} onPatchCampaign={patchCampaign} />}
+
+      {/* Item catalog: GM-authored loot with icons + rules-engine effects */}
+      {isGm && <ItemsPanel campaignId={id} />}
 
       <section className="space-y-3">
         {floors.map((f) => (
