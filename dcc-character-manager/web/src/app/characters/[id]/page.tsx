@@ -20,7 +20,9 @@ import {
   statCheckDifficulty,
   REST_RULES,
   DEBUFFS,
+  applyItemEffect,
   describeItemEffect,
+  reconcileDebuffRows,
   roundDown,
   RANK_CAP_EARLY,
   RANK_CAP_ABSOLUTE,
@@ -54,6 +56,13 @@ import { Hotbar, HotbarDnd, ItemDrag, SpellDrag } from "@/components/Hotbar";
 import { clearSlot, findEntry, firstFreeSlot, placeEntry, seedHotbar } from "@/lib/hotbar";
 import type { HotbarEntry } from "@/lib/types";
 import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
+
+/** Post-consume System commentary, keyed by effect kind. */
+const CONSUME_SNARK: Record<string, string> = {
+  heal_slots: " The System notes your cowardice.",
+  restore_mana: " Try not to waste it.",
+  cure_debuff: " Hygiene achievement progress: 1%.",
+};
 
 function Sheet() {
   const { id } = useParams<{ id: string }>();
@@ -120,6 +129,8 @@ function Sheet() {
   // Bumped when the GM grants an item so an open inventory panel refetches.
   const [invRefresh, setInvRefresh] = useState(0);
   const inv = useInventory(id, invRefresh);
+  // A cure-anything consumable waiting for the player to pick a debuff.
+  const [curePick, setCurePick] = useState<InventoryEntry | null>(null);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -231,14 +242,14 @@ function Sheet() {
     notify("crawler", `Cast ${sp.name} (−${sp.mana} Mana).`);
   }
 
-  /** Click behavior for item slots (T10): consumables activate in T11, bombs deploy in T12. */
+  /** Click behavior for item slots: consumables consume (T11), bombs deploy in T12. */
   function useItemFromBar(entry: InventoryEntry) {
     const item = entry.item;
     if (!item) return;
     if (item.kind === "bomb") {
       notify("system", `${item.name}: deployment requires the tactical map. Patience, crawler.`);
     } else if (item.kind === "consumable") {
-      notify("system", `${item.name} rattles expectantly. Consuming arrives with the next System patch.`);
+      consumeItem(entry);
     } else {
       notify("crawler", `${item.name}: ${describeItemEffect(item.effect)}`);
     }
@@ -269,6 +280,87 @@ function Sheet() {
   // is empty; the seed persists with the first bar mutation (drag or ★). Null
   // until the migration ran → the old spells-only Hotlist stays as fallback.
   const bar = c.hotbar !== undefined ? seedHotbar(c.hotbar, c.spells) : null;
+
+  /**
+   * T11: click-to-consume. The engine does the math; this handles the confirm
+   * (the debuff picker doubles as the confirm on the cure path), the qty
+   * decrement with optimistic concurrency (row changed under us → refetch,
+   * touch nothing), and hotbar cleanup when the last one is spent. Consuming
+   * while Dying is deliberately allowed — that's what potions are for.
+   */
+  async function consumeItem(entry: InventoryEntry, chosenDebuff?: string) {
+    const item = entry.item;
+    if (!c || !item || item.kind !== "consumable") return;
+    let effect = item.effect;
+    if (effect?.kind === "cure_debuff" && !effect.debuffId && !chosenDebuff) {
+      if (c.debuffs.length === 0) {
+        notify("system", "No debuffs to cure. The System applauds your unearned good health.");
+        return;
+      }
+      setCurePick(entry);
+      return;
+    }
+    if (effect?.kind === "cure_debuff" && chosenDebuff) effect = { kind: "cure_debuff", debuffId: chosenDebuff };
+    if (!chosenDebuff && !window.confirm(`Use ${item.name}?`)) return;
+
+    const outcome = effect
+      ? applyItemEffect(
+          {
+            hbSlots: c.current_hb_slots,
+            maxHbSlots: 10,
+            mana: c.current_mana,
+            maxMana,
+            debuffs: c.debuffs.map((d) => d.name),
+          },
+          effect,
+        )
+      : null;
+    // A no-op outcome (already full, The Taint, nothing to cure) spares the
+    // item; custom/effect-less consumables always spend — the text IS the effect.
+    const consumed = !effect || effect.kind === "custom" || !!outcome?.changed;
+    if (!consumed && outcome) {
+      notify("system", `${outcome.summary} (${item.name} not consumed.)`);
+      return;
+    }
+
+    const q =
+      entry.row.qty > 1
+        ? supabase()
+            .from("character_items")
+            .update({ qty: entry.row.qty - 1 })
+            .eq("id", entry.row.id)
+            .eq("qty", entry.row.qty)
+            .select("id")
+        : supabase()
+            .from("character_items")
+            .delete()
+            .eq("id", entry.row.id)
+            .eq("qty", entry.row.qty)
+            .select("id");
+    const { data: touched } = await q;
+    if (!touched?.length) {
+      notify("system", "Inventory desync detected. Recounting your possessions.");
+      setInvRefresh((k) => k + 1);
+      return;
+    }
+
+    const patch: Partial<Character> = {};
+    if (outcome?.changed) {
+      patch.current_hb_slots = outcome.target.hbSlots;
+      patch.current_mana = outcome.target.mana;
+      patch.debuffs = reconcileDebuffRows(c.debuffs, outcome.target.debuffs);
+    }
+    if (entry.row.qty === 1 && bar) {
+      const at = findEntry(bar, { type: "item", id: item.id });
+      if (at >= 0) patch.hotbar = clearSlot(bar, at);
+    }
+    if (Object.keys(patch).length > 0) persist(patch);
+    setInvRefresh((k) => k + 1);
+    notify(
+      "crawler",
+      `You used ${item.name}. ${outcome?.summary ?? "Nothing happens. Probably."}${CONSUME_SNARK[effect?.kind ?? ""] ?? ""}`,
+    );
+  }
 
   return (
     <HotbarDnd bar={bar} onChange={(next) => persist({ hotbar: next })}>
@@ -366,6 +458,44 @@ function Sheet() {
         <Minimap floor={c.floor} label={campaigns.find((cp) => cp.id === c.campaign_id)?.name ?? null} />
       )}
       {overlay && <SystemOverlay send={overlay} onDismiss={() => setOverlay(null)} />}
+
+      {/* Cure-anything consumable: pick which active debuff it burns (this IS the confirm). */}
+      {curePick && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setCurePick(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-80 max-w-full rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
+          >
+            <h3 className="mb-3 font-display font-semibold tracking-wider text-amber-300">
+              {curePick.item?.name}: cure which debuff?
+            </h3>
+            <div className="flex flex-col gap-1">
+              {[...new Set(c.debuffs.map((d) => d.name))].map((name) => (
+                <button
+                  key={name}
+                  onClick={() => {
+                    const picked = curePick;
+                    setCurePick(null);
+                    consumeItem(picked, name);
+                  }}
+                  className="rounded border border-red-900 bg-red-950/60 px-3 py-1.5 text-left text-sm text-red-200 hover:border-red-500"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setCurePick(null)}
+              className="mt-3 rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
@@ -495,7 +625,12 @@ function Sheet() {
               label: "🎒 INVENTORY",
               content: (
                 <div className="space-y-2 text-sm">
-                  <InventoryItems entries={inv.entries} missing={inv.missing} DragWrap={ItemDrag} />
+                  <InventoryItems
+                    entries={inv.entries}
+                    missing={inv.missing}
+                    DragWrap={ItemDrag}
+                    onUse={(entry) => consumeItem(entry)}
+                  />
                   <div className="flex items-center gap-3 border-t border-zinc-800 pt-2">
                     <span>
                       Gold <b className="font-display">{c.gold}</b>

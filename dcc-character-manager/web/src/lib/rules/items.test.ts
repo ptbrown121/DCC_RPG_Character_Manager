@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyItemEffect, describeItemEffect, type ItemEffectTarget } from "./items";
+import { applyItemEffect, describeItemEffect, reconcileDebuffRows, type ItemEffectTarget } from "./items";
 
 const base: ItemEffectTarget = {
   hbSlots: 4,
@@ -104,6 +104,29 @@ describe("applyItemEffect / aoe and custom", () => {
     const out = applyItemEffect(base, { kind: "custom", text: "You feel watched." });
     expect(out.changed).toBe(false);
     expect(out.summary).toBe("You feel watched.");
+  });
+});
+
+describe("reconcileDebuffRows", () => {
+  it("preserves row notes and removes exactly the cured instance", () => {
+    const rows = [
+      { name: "Poisoned", note: "spider bite" },
+      { name: "Poisoned", note: "bad shrimp" },
+      { name: "Burned" },
+    ];
+    const out = reconcileDebuffRows(rows, ["Poisoned", "Burned"]);
+    expect(out).toEqual([{ name: "Poisoned", note: "spider bite" }, { name: "Burned" }]);
+  });
+
+  it("creates bare rows for names without a match", () => {
+    expect(reconcileDebuffRows([{ name: "Burned", note: "x" }], ["Burned", "Dying"])).toEqual([
+      { name: "Burned", note: "x" },
+      { name: "Dying" },
+    ]);
+  });
+
+  it("empty names → empty rows", () => {
+    expect(reconcileDebuffRows([{ name: "Burned" }], [])).toEqual([]);
   });
 });
 

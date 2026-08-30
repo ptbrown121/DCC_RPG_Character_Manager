@@ -705,10 +705,13 @@ export function InventoryItems({
   entries,
   missing,
   DragWrap,
+  onUse,
 }: {
   entries: InventoryEntry[] | null;
   missing: boolean;
   DragWrap?: (props: { entry: InventoryEntry; children: ReactNode }) => ReactNode;
+  /** Consume flow (T11) — renders a Use button on consumable rows. */
+  onUse?: (entry: InventoryEntry) => void;
 }) {
   if (missing) {
     return <p className="text-xs text-amber-400">Run migration 0013 to enable the item inventory.</p>;
@@ -746,7 +749,19 @@ export function InventoryItems({
             )}
           </WithItemTooltip>
         );
-        return <li key={row.id}>{DragWrap ? <DragWrap entry={e}>{inner}</DragWrap> : inner}</li>;
+        return (
+          <li key={row.id} className="flex items-center justify-between gap-2">
+            {DragWrap ? <DragWrap entry={e}>{inner}</DragWrap> : inner}
+            {onUse && item.kind === "consumable" && (
+              <button
+                onClick={() => onUse(e)}
+                className="rounded bg-emerald-800 px-2 py-0.5 text-xs font-semibold hover:bg-emerald-700"
+              >
+                Use
+              </button>
+            )}
+          </li>
+        );
       })}
       {entries.length === 0 && (
         <li className="text-xs text-zinc-500">No items. The System will provide. Probably.</li>

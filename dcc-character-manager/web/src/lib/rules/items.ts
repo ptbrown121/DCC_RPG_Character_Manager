@@ -116,6 +116,22 @@ function removeFirst(list: string[], name: string): string[] {
   return i === -1 ? list : [...list.slice(0, i), ...list.slice(i + 1)];
 }
 
+/**
+ * Map an effect outcome's debuff name-list back onto the character's debuff
+ * rows, preserving row extras (notes) and duplicate stacking: each name claims
+ * the first unclaimed row with that name; names with no row become bare rows.
+ */
+export function reconcileDebuffRows<T extends { name: string }>(
+  rows: T[],
+  names: string[],
+): (T | { name: string })[] {
+  const pool = [...rows];
+  return names.map((n) => {
+    const i = pool.findIndex((r) => r.name === n);
+    return i >= 0 ? pool.splice(i, 1)[0] : { name: n };
+  });
+}
+
 /** One-line effect description for tooltips, the item editor, and inventory rows. */
 export function describeItemEffect(effect: ItemEffect | null | undefined): string {
   if (!effect) return "No mechanical effect.";

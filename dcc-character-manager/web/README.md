@@ -91,9 +91,16 @@ truth for any rules question; code comments cite them by section/table.
   (seeded once from the old `SpellRow.hotlist` flags, now deprecated), dragged
   via dnd-kit (`pointerWithin` collision so drops land at the cursor, not by
   rect overlap) from the spell/inventory rail panels onto slots, slot ⇄ slot
-  to swap, off the bar to clear. Slot clicks: spells cast, consumables
-  activate (T11), bombs deploy to the map (T12); pre-0013 sheets fall back to
-  the old spells-only Hotlist.
+  to swap, off the bar to clear. Slot clicks: spells cast, bombs deploy to
+  the map (T12); pre-0013 sheets fall back to the old spells-only Hotlist.
+  **Consumables** (hotbar click or the inventory panel's Use button) run
+  `applyItemEffect` through the rules engine — The Taint blocks healing,
+  healing clears Dying, cure-anything items open a picker limited to active
+  debuffs — then decrement qty with an optimistic-concurrency guard (the
+  UPDATE/DELETE is qualified on the qty we read; zero rows touched means
+  another tab moved first, so nothing is applied and the panel refetches).
+  The last one spent deletes the row and clears its hotbar slot. No-op
+  outcomes (already full, nothing to cure) spare the item.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
