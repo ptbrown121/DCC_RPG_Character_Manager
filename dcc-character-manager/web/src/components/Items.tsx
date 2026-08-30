@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- storage-hosted user images, next/image adds nothing here */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { assetUrl } from "@/lib/upload";
 import { useUser } from "./AuthGate";
@@ -16,7 +16,7 @@ import {
   type ItemKind,
   type ItemRarity,
 } from "@/lib/rules";
-import type { AssetRow, ItemRow } from "@/lib/types";
+import type { AssetRow, CharacterItemRow, ItemRow } from "@/lib/types";
 
 /** Rarity color scale — shared by the catalog, tooltips (T9), and inventory. */
 export const RARITY_COLORS: Record<ItemRarity, string> = {
@@ -35,6 +35,98 @@ export const ITEM_KIND_LABELS: Record<ItemKind, string> = {
   quest: "📜 Quest",
   junk: "🗑 Junk",
 };
+
+/* ---------- Item tooltip (shared: inventory here, hotbar T10, map drops T12) ---------- */
+
+// Assumed card size for edge flipping — a fixed estimate keeps this free of
+// render-time DOM measuring; max-w/overflow on the card make it safe.
+const TIP_W = 300;
+const TIP_H = 200;
+
+function tipPos(x: number, y: number) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  return {
+    left: x + 14 + TIP_W > vw - 8 ? Math.max(8, x - 14 - TIP_W) : x + 14,
+    top: y + 14 + TIP_H > vh - 8 ? Math.max(8, y - 14 - TIP_H) : y + 14,
+  };
+}
+
+/** The HUD-styled item card itself; positioning is the wrapper's job. */
+export function ItemTooltipCard({
+  item,
+  asset,
+  pos,
+}: {
+  item: ItemRow;
+  asset?: AssetRow | null;
+  pos: { left: number; top: number };
+}) {
+  return (
+    <div
+      className="pointer-events-none fixed z-50 w-72 rounded-lg border bg-zinc-950/95 p-3 shadow-[0_0_30px_rgba(0,0,0,0.7)]"
+      style={{ ...pos, borderColor: `${RARITY_COLORS[item.rarity]}66` }}
+    >
+      <div className="flex items-center gap-2">
+        {asset && (
+          <img
+            src={assetUrl(asset.storage_path)}
+            alt=""
+            className="h-10 w-10 rounded border border-zinc-800 bg-zinc-900 object-contain"
+          />
+        )}
+        <div>
+          <p className="font-display font-semibold tracking-wide" style={{ color: RARITY_COLORS[item.rarity] }}>
+            {item.name}
+          </p>
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500">
+            {item.rarity} {item.kind}
+            {item.stackable ? "" : " · does not stack"}
+          </p>
+        </div>
+      </div>
+      {item.description && <p className="mt-2 text-xs italic text-zinc-400">{item.description}</p>}
+      <p className="mt-2 text-xs text-amber-300">{describeItemEffect(item.effect)}</p>
+    </div>
+  );
+}
+
+/**
+ * Hover/focus wrapper: pointer-following tooltip, flipped near screen edges;
+ * keyboard focus anchors it to the element instead.
+ */
+export function WithItemTooltip({
+  item,
+  asset,
+  className,
+  children,
+}: {
+  item: ItemRow;
+  asset?: AssetRow | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  return (
+    <span
+      tabIndex={0}
+      className={className}
+      onMouseEnter={(e) => setPos(tipPos(e.clientX, e.clientY))}
+      onMouseMove={(e) => setPos(tipPos(e.clientX, e.clientY))}
+      onMouseLeave={() => setPos(null)}
+      onFocus={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setPos(tipPos(r.right, r.top));
+      }}
+      onBlur={() => setPos(null)}
+    >
+      {children}
+      {pos && <ItemTooltipCard item={item} asset={asset} pos={pos} />}
+    </span>
+  );
+}
+
+/* ---------- GM item editor ---------- */
 
 type EffectKind = ItemEffect["kind"] | "none";
 
@@ -240,6 +332,144 @@ function ItemEditor({
   );
 }
 
+/* ---------- GM grant flow ---------- */
+
+const GRANT_FLAVOR: Record<ItemKind, string> = {
+  consumable: "Don't use it all at once.",
+  bomb: "Please aim it away from your party. Or don't.",
+  equipment: "Try to look like you deserve it.",
+  quest: "This is definitely not a trap.",
+  junk: "The System's generosity has limits.",
+};
+
+/** Pick crawlers (or the whole party), grant via RPC, and fire the private
+ * System reward overlay + an inventory-refresh ping per recipient. */
+function GrantDialog({
+  item,
+  asset,
+  party,
+  onClose,
+}: {
+  item: ItemRow;
+  asset?: AssetRow;
+  party: { id: string; name: string }[];
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [qty, setQty] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function grant() {
+    if (selected.size === 0) return;
+    setBusy(true);
+    setStatus(null);
+    const sb = supabase();
+    const failures: string[] = [];
+    for (const cid of selected) {
+      const { error } = await sb.rpc("grant_item", { p_character: cid, p_item: item.id, p_qty: qty });
+      if (error) {
+        failures.push(
+          /grant_item/.test(error.message) ? "Run migration 0013 to enable grants." : error.message,
+        );
+        continue;
+      }
+      // The reward-delivery fantasy: a private System overlay with the item's
+      // image, plus a silent ping so an open inventory panel refetches.
+      const ch = sb.channel(`hud:character:${cid}`);
+      await new Promise<void>((resolve) =>
+        ch.subscribe((s) => {
+          if (s === "SUBSCRIBED") resolve();
+        }),
+      );
+      await ch.send({
+        type: "broadcast",
+        event: "system_send",
+        payload: {
+          text: `The System has granted you: ${qty > 1 ? `${qty}× ` : ""}${item.name}. ${GRANT_FLAVOR[item.kind]}`,
+          imageUrl: asset ? assetUrl(asset.storage_path) : undefined,
+        },
+      });
+      await ch.send({ type: "broadcast", event: "item_grant", payload: { itemId: item.id } });
+      sb.removeChannel(ch);
+    }
+    setBusy(false);
+    setStatus(
+      failures.length
+        ? [...new Set(failures)].join(" · ")
+        : `Granted to ${selected.size} crawler${selected.size === 1 ? "" : "s"}. Open sheets got the overlay.`,
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-96 max-w-full rounded-lg border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <h3 className="font-display font-semibold tracking-wider text-amber-300">
+            🎁 Grant <span style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</span>
+          </h3>
+          <button onClick={onClose} className="ml-auto text-zinc-500 hover:text-zinc-200">✕</button>
+        </div>
+        <div className="mb-3 space-y-1 text-sm">
+          {party.map((p) => (
+            <label key={p.id} className="flex items-center gap-2 text-zinc-300">
+              <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggle(p.id)} />
+              {p.name}
+            </label>
+          ))}
+          {party.length === 0 && <p className="text-xs text-zinc-500">No crawlers linked to this campaign yet.</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            onClick={() => setSelected(new Set(party.map((p) => p.id)))}
+            className="rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700"
+          >
+            Whole party
+          </button>
+          <label className="ml-auto flex items-center gap-1 text-zinc-400">
+            Qty
+            <input
+              type="number"
+              min={1}
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+              className={`w-16 ${FIELD}`}
+            />
+          </label>
+          <button
+            onClick={grant}
+            disabled={busy || selected.size === 0}
+            className="rounded bg-amber-700 px-3 py-1 font-semibold hover:bg-amber-600 disabled:opacity-40"
+          >
+            {busy ? "Granting…" : "Grant"}
+          </button>
+        </div>
+        {status && <p className="mt-2 text-xs text-emerald-400">{status}</p>}
+      </div>
+    </div>
+  );
+}
+
 /** GM item catalog for a campaign: create/edit items with icons and effects.
  * Granting them to crawlers is T9; using them is T11; bombs hit the map in T12. */
 export function ItemsPanel({ campaignId }: { campaignId: string }) {
@@ -249,14 +479,17 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
   const [missing, setMissing] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
+  const [party, setParty] = useState<{ id: string; name: string }[]>([]);
+  const [grantFor, setGrantFor] = useState<ItemRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const sb = supabase();
-      const [{ data: itemRows, error }, { data: assetRows }] = await Promise.all([
+      const [{ data: itemRows, error }, { data: assetRows }, { data: partyRows }] = await Promise.all([
         sb.from("items").select("*").eq("campaign_id", campaignId).order("created_at"),
         sb.from("assets").select("*").eq("campaign_id", campaignId).in("kind", ["item", "misc"]),
+        sb.from("characters").select("id,name").eq("campaign_id", campaignId),
       ]);
       if (cancelled) return;
       if (error) {
@@ -265,6 +498,7 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
       }
       setItems((itemRows as ItemRow[]) ?? []);
       setAssets(Object.fromEntries(((assetRows as AssetRow[]) ?? []).map((a) => [a.id, a])));
+      setParty((partyRows as { id: string; name: string }[]) ?? []);
     })();
     return () => {
       cancelled = true;
@@ -311,8 +545,8 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
         </button>
       </div>
       <p className="mb-3 text-xs text-zinc-400">
-        The campaign&apos;s loot catalog. Effects run through the rules engine when a crawler uses
-        one; granting items to the party arrives with the inventory update.
+        The campaign&apos;s loot catalog. 🎁 grants deliver an item straight to a crawler&apos;s
+        inventory with a private System overlay; effects run through the rules engine when used.
       </p>
       {missing && <p className="mb-2 text-xs text-amber-400">Run migration 0012 to enable items.</p>}
 
@@ -347,13 +581,23 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
                   {i.kind}
                 </span>
                 <span className="text-[11px] text-zinc-500">{describeItemEffect(i.effect)}</span>
-                <button
-                  onClick={() => deleteItem(i)}
-                  className="ml-auto rounded px-1 text-zinc-600 hover:text-red-400"
-                  title="Delete item"
-                >
-                  ✕
-                </button>
+                <span className="ml-auto flex items-center gap-1">
+                  <button
+                    onClick={() => setGrantFor(i)}
+                    disabled={party.length === 0}
+                    className="rounded bg-zinc-800 px-2 py-0.5 text-xs hover:bg-zinc-700 disabled:opacity-40"
+                    title={party.length ? "Grant to crawlers" : "No crawlers in the campaign yet"}
+                  >
+                    🎁 Grant
+                  </button>
+                  <button
+                    onClick={() => deleteItem(i)}
+                    className="rounded px-1 text-zinc-600 hover:text-red-400"
+                    title="Delete item"
+                  >
+                    ✕
+                  </button>
+                </span>
               </div>
               {openId === i.id && (
                 <ItemEditor
@@ -371,6 +615,15 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
         )}
       </ul>
 
+      {grantFor && (
+        <GrantDialog
+          item={grantFor}
+          asset={grantFor.asset_id ? assets[grantFor.asset_id] : undefined}
+          party={party}
+          onClose={() => setGrantFor(null)}
+        />
+      )}
+
       {iconPickerFor && (
         <AssetPicker
           campaignId={campaignId}
@@ -385,5 +638,99 @@ export function ItemsPanel({ campaignId }: { campaignId: string }) {
         />
       )}
     </section>
+  );
+}
+
+/* ---------- Player inventory (🎒 rail panel on the sheet) ---------- */
+
+interface InventoryEntry {
+  row: CharacterItemRow;
+  /** Null when the GM deleted the catalog item (or the campaign link broke). */
+  item: ItemRow | null;
+  asset: AssetRow | null;
+}
+
+/** The crawler's granted items with icons, qty badges, and tooltips. Gold,
+ * junk and loot boxes stay with the sheet; this only renders catalog items. */
+export function InventoryItems({ characterId, refresh = 0 }: { characterId: string; refresh?: number }) {
+  const [entries, setEntries] = useState<InventoryEntry[] | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sb = supabase();
+      const { data: rows, error } = await sb
+        .from("character_items")
+        .select("*")
+        .eq("character_id", characterId)
+        .order("acquired_at");
+      if (cancelled) return;
+      if (error) {
+        setMissing(true);
+        setEntries([]);
+        return;
+      }
+      const list = (rows as CharacterItemRow[]) ?? [];
+      const itemIds = [...new Set(list.map((r) => r.item_id))];
+      const items = itemIds.length
+        ? (((await sb.from("items").select("*").in("id", itemIds)).data as ItemRow[]) ?? [])
+        : [];
+      const assetIds = [...new Set(items.map((i) => i.asset_id).filter(Boolean))] as string[];
+      const assets = assetIds.length
+        ? (((await sb.from("assets").select("*").in("id", assetIds)).data as AssetRow[]) ?? [])
+        : [];
+      if (cancelled) return;
+      const itemMap = new Map(items.map((i) => [i.id, i]));
+      const assetMap = new Map(assets.map((a) => [a.id, a]));
+      setEntries(
+        list.map((row) => {
+          const item = itemMap.get(row.item_id) ?? null;
+          return { row, item, asset: item?.asset_id ? (assetMap.get(item.asset_id) ?? null) : null };
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [characterId, refresh]);
+
+  if (missing) {
+    return <p className="text-xs text-amber-400">Run migration 0013 to enable the item inventory.</p>;
+  }
+  if (entries === null) return <p className="text-xs text-zinc-500">Loading…</p>;
+  return (
+    <ul className="space-y-1 text-sm">
+      {entries.map(({ row, item, asset }) => (
+        <li key={row.id}>
+          {item ? (
+            <WithItemTooltip item={item} asset={asset} className="flex cursor-default items-center gap-2 rounded px-1 py-0.5 hover:bg-zinc-800/60 focus:bg-zinc-800/60 focus:outline-none">
+              {asset ? (
+                <img
+                  src={assetUrl(asset.storage_path)}
+                  alt=""
+                  className="h-6 w-6 rounded border border-zinc-800 bg-zinc-950 object-contain"
+                />
+              ) : (
+                <span className="flex h-6 w-6 items-center justify-center text-xs">
+                  {ITEM_KIND_LABELS[item.kind].split(" ")[0]}
+                </span>
+              )}
+              <span style={{ color: RARITY_COLORS[item.rarity] }}>{item.name}</span>
+              {row.qty > 1 && (
+                <span className="rounded-full border border-zinc-700 px-1.5 text-[10px] text-zinc-400">
+                  ×{row.qty}
+                </span>
+              )}
+            </WithItemTooltip>
+          ) : (
+            <span className="text-xs text-zinc-600 line-through">(item removed from the catalog) ×{row.qty}</span>
+          )}
+        </li>
+      ))}
+      {entries.length === 0 && (
+        <li className="text-xs text-zinc-500">No items. The System will provide. Probably.</li>
+      )}
+    </ul>
   );
 }

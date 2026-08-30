@@ -48,6 +48,7 @@ import {
   type SystemSend,
 } from "@/components/Hud";
 import { ActiveMapStage } from "@/components/Tokens";
+import { InventoryItems } from "@/components/Items";
 import type { Campaign, CampaignFloor, Character, SceneState, SkillRow, SpellRow } from "@/lib/types";
 
 function Sheet() {
@@ -112,6 +113,8 @@ function Sheet() {
   // Live active-map switches likewise override campaigns.active_map_id
   // (undefined = no broadcast heard yet, fall back to the row).
   const [liveMapId, setLiveMapId] = useState<string | null | undefined>(undefined);
+  // Bumped when the GM grants an item so an open inventory panel refetches.
+  const [invRefresh, setInvRefresh] = useState(0);
   useSystemSends(id, c?.campaign_id ?? null, {
     onSend: (send) => {
       setOverlay(send);
@@ -127,6 +130,7 @@ function Sheet() {
       setLiveMapId(activeMapId);
       notify("floor", activeMapId ? "Tactical map online." : "Tactical map feed closed.");
     },
+    onItemGrant: () => setInvRefresh((k) => k + 1),
   });
 
   const derived = useMemo(() => (c ? deriveFromEnhanced(c.stats.enhanced, c.move_ft) : null), [c]);
@@ -441,7 +445,8 @@ function Sheet() {
               label: "🎒 INVENTORY",
               content: (
                 <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-3">
+                  <InventoryItems characterId={id} refresh={invRefresh} />
+                  <div className="flex items-center gap-3 border-t border-zinc-800 pt-2">
                     <span>
                       Gold <b className="font-display">{c.gold}</b>
                     </span>

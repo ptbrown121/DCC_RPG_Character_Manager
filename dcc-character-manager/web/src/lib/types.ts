@@ -99,6 +99,9 @@ export interface VehicleEntry {
   upgrades: string;
 }
 
+/** One entry of the unified 10-slot hotbar (migration 0013, wired up in T10). */
+export type HotbarEntry = { type: "spell" | "item"; id: string } | null;
+
 export interface Character {
   id: string;
   owner_id: string;
@@ -123,6 +126,8 @@ export interface Character {
   social: SocialState;
   loot: LootBoxEntry[];
   companions: CompanionEntry[];
+  /** Unified spell+item hotbar. Optional until migration 0013 has been run. */
+  hotbar?: HotbarEntry[];
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -238,6 +243,16 @@ export interface ItemRow {
   stackable: boolean;
   effect: ItemEffect | null;
   created_at: string;
+}
+
+/** A stack of a catalog item in a crawler's inventory (migration 0013).
+ * One row per (character, item); GM grants go through the grant_item RPC. */
+export interface CharacterItemRow {
+  id: string;
+  character_id: string;
+  item_id: string;
+  qty: number;
+  acquired_at: string;
 }
 
 /** A player account that joined a campaign via join code (migration 0008). */

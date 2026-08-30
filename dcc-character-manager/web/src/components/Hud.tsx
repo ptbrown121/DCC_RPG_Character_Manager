@@ -505,6 +505,8 @@ export function useSystemSends(
     onScene: (scene: SceneState) => void;
     /** GM switched the active tabletop map (null = hidden again). */
     onMapState?: (state: { activeMapId: string | null }) => void;
+    /** GM granted this crawler an item — refetch the inventory panel. */
+    onItemGrant?: (grant: { itemId: string }) => void;
   },
 ) {
   const cb = useRef(handlers);
@@ -523,6 +525,9 @@ export function useSystemSends(
         .on("broadcast", { event: "scene" }, ({ payload }) => cb.current.onScene(payload as SceneState))
         .on("broadcast", { event: "map_state" }, ({ payload }) =>
           cb.current.onMapState?.(payload as { activeMapId: string | null }),
+        )
+        .on("broadcast", { event: "item_grant" }, ({ payload }) =>
+          cb.current.onItemGrant?.(payload as { itemId: string }),
         )
         .subscribe();
     }
