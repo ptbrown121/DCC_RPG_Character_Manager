@@ -412,9 +412,13 @@ function Sheet() {
 
   return (
     <HotbarDnd bar={bar} onChange={(next) => persist({ hotbar: next })} onMapDrop={handleMapDrop}>
-    <div className="space-y-6 pb-24 pt-12">
+    <div className="space-y-6 pb-32 pt-12 sm:pb-24">
       {/* HUD chrome (book default layout: notifications ↖, bars ↗, hotlist ↓, minimap ↘).
           Elements the GM has switched off simply vanish, like the AI took them. */}
+      {/* On phones/tablets there are no viewport gutters for floating HUD chrome,
+          so notifications + bars flow as a top row; lg:contents dissolves the
+          wrapper on desktop and the children go back to position:fixed. */}
+      <div className="flex items-start gap-2 lg:contents">
       {!hudHidden.includes("notifications") && <NotificationsHud items={notifications} />}
       {!hudHidden.includes("bars") && (
         <HudBars
@@ -489,6 +493,7 @@ function Sheet() {
           </div>
         </HudBars>
       )}
+      </div>
       {!hudHidden.includes("hotlist") &&
         (bar ? (
           <Hotbar
@@ -570,23 +575,16 @@ function Sheet() {
         className="hud-item fixed bottom-3 left-3 z-40 rounded border border-zinc-700 bg-zinc-950/90 px-3 py-1.5 font-display text-xs tracking-wider text-zinc-300 hover:border-amber-600"
         title={mode === "play" ? "Open the full editable sheet" : "Back to the combat view (bookkeeping hidden)"}
       >
-        {mode === "play" ? "🛠 MANAGE SHEET" : "🎮 RETURN TO PLAY"}
+        {mode === "play" ? (
+          <>🛠<span className="hidden sm:inline"> MANAGE SHEET</span></>
+        ) : (
+          <>🎮<span className="hidden sm:inline"> RETURN TO PLAY</span></>
+        )}
       </button>
 
-      {/* What the party is looking at (GM-controlled, persisted on the campaign):
-          the tabletop map when one is active, otherwise the image Area feed. */}
-      {(() => {
-        const campaign = campaigns.find((cp) => cp.id === c.campaign_id);
-        const activeMapId = liveMapId !== undefined ? liveMapId : (campaign?.active_map_id ?? null);
-        return activeMapId ? (
-          <ActiveMapStage mapId={activeMapId} characterId={c.id} bombDropRef={bombDropRef} />
-        ) : (
-          <SceneStage scene={liveScene ?? campaign?.scene ?? null} />
-        );
-      })()}
-
       {/* Play mode: side rail opens skills / spells / inventory / companions as
-          floating panels, keeping the center clear for the Area feed. */}
+          floating panels, keeping the center clear for the Area feed. On phones
+          the rail flows as a tab row above the map, so it renders first. */}
       {mode === "play" && (
         <HudRail
           tabs={[
@@ -723,6 +721,18 @@ function Sheet() {
           ]}
         />
       )}
+
+      {/* What the party is looking at (GM-controlled, persisted on the campaign):
+          the tabletop map when one is active, otherwise the image Area feed. */}
+      {(() => {
+        const campaign = campaigns.find((cp) => cp.id === c.campaign_id);
+        const activeMapId = liveMapId !== undefined ? liveMapId : (campaign?.active_map_id ?? null);
+        return activeMapId ? (
+          <ActiveMapStage mapId={activeMapId} characterId={c.id} bombDropRef={bombDropRef} />
+        ) : (
+          <SceneStage scene={liveScene ?? campaign?.scene ?? null} />
+        );
+      })()}
 
       {/* Stats */}
       {mode === "manage" && (

@@ -692,7 +692,7 @@ function ActiveMapStageInner({
       <div className="flex items-baseline gap-2 border-b border-emerald-900/50 px-3 py-1">
         <span className="font-display text-[10px] tracking-[0.3em] text-emerald-400">▚ TACTICAL MAP ▞</span>
         {map && <span className="truncate text-[10px] text-zinc-500">{map.name}</span>}
-        <span className="ml-auto text-[9px] text-zinc-600">drag to pan · scroll/pinch to zoom · ⇧click to ping</span>
+        <span className="ml-auto hidden text-[9px] text-zinc-600 sm:inline">drag to pan · scroll/pinch to zoom · ⇧click to ping</span>
       </div>
       {failed ? (
         <p className="px-3 py-6 text-center text-xs text-zinc-600">
@@ -708,7 +708,8 @@ function ActiveMapStageInner({
               grid={map.grid}
               // Sized so the stage bottom clears the fixed hotbar without scrolling:
               // 21rem ≈ navbar + sheet header + section chrome + hotbar zone.
-              className="h-[max(20rem,calc(100vh-21rem))] w-full"
+              // svh so iOS's collapsing toolbar doesn't hide the bottom edge.
+              className="h-[max(20rem,calc(100svh-21rem))] w-full"
               onPing={meta.sendPing}
             >
               <DrawingLayer strokes={strokes} live={[remoteLive]} />

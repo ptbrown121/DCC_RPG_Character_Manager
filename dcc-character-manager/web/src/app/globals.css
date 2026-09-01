@@ -16,11 +16,17 @@ body {
    brings them into focus, like a crawler glancing at their interface. */
 @layer components {
   .hud-item {
-    opacity: 0.55;
     transition:
       opacity 0.2s ease,
       transform 0.2s ease,
       box-shadow 0.2s ease;
+  }
+  /* Touch screens have no hover with which to "glance at" a dimmed element —
+     only dim the HUD where a pointer can bring it back into focus. */
+  @media (hover: hover) {
+    .hud-item {
+      opacity: 0.55;
+    }
   }
   .hud-item:hover,
   .hud-item:focus-within {

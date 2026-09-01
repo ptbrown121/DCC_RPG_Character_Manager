@@ -290,7 +290,8 @@ export function Hotbar({
 }) {
   const slots = normalizeHotbar(bar);
   return (
-    <div className="hud-item fixed bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1">
+    // Narrow portrait screens can't fit 10 slots in a row — wrap to a 5×2 grid.
+    <div className="hud-item fixed bottom-3 left-1/2 z-40 grid -translate-x-1/2 grid-cols-5 gap-1 sm:flex">
       {slots.map((e, i) => (
         <HotbarSlot
           key={i}

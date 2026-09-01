@@ -53,9 +53,10 @@ export function NotificationsHud({ items }: { items: HudNotification[] }) {
   const unread = items.length - readCount;
 
   return (
-    // When the list is open it must paint over the HudRail below it (also z-40,
-    // later in the DOM) or the rail buttons sit on top of the messages.
-    <div className={`hud-item fixed left-3 top-16 ${open ? "z-[45]" : "z-40"}`}>
+    // Floats top-left on desktop only; on phones it flows in the page's top HUD
+    // row. When the list is open it must paint over the HudRail below it (also
+    // z-40, later in the DOM) or the rail buttons sit on top of the messages.
+    <div className={`hud-item lg:fixed lg:left-3 lg:top-16 ${open ? "z-[45]" : "z-40"}`}>
       <button
         onClick={() => {
           setOpen(!open);
@@ -63,13 +64,13 @@ export function NotificationsHud({ items }: { items: HudNotification[] }) {
         }}
         className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-950/90 px-3 py-1.5 font-display text-xs tracking-wider text-zinc-300 hover:border-amber-600"
       >
-        🗂 NOTIFICATIONS
+        🗂<span className="hidden sm:inline">NOTIFICATIONS</span>
         {unread > 0 && (
           <span className="animate-hud-blink inline-block h-2 w-2 rounded-full bg-amber-400" />
         )}
       </button>
       {open && (
-        <ul className="animate-hud-materialize mt-1 max-h-72 w-80 space-y-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/95 p-2">
+        <ul className="animate-hud-materialize mt-1 max-h-72 w-80 max-w-[calc(100vw-1.5rem)] space-y-1 overflow-y-auto rounded border border-zinc-800 bg-zinc-950/95 p-2">
           {[...items].reverse().map((n, i) => (
             <li key={`${n.at}-${i}`} className={`rounded border-l-2 bg-zinc-900/80 px-2 py-1 text-xs ${KIND_STYLES[n.kind]}`}>
               <span className="mr-1 font-display text-[9px] tracking-wider opacity-60">{KIND_LABELS[n.kind]}</span>
@@ -105,7 +106,7 @@ export function HudBars({
   const hpColor = hbSlots <= 3 ? "bg-red-500" : hbSlots <= 5 ? "bg-amber-400" : "bg-emerald-500";
   return (
     <div
-      className={`hud-item fixed right-3 top-16 z-40 rounded border border-zinc-800 bg-zinc-950/90 p-2 ${open ? "w-80" : "w-60"}`}
+      className={`hud-item z-40 min-w-0 flex-1 rounded border border-zinc-800 bg-zinc-950/90 p-2 lg:fixed lg:right-3 lg:top-16 lg:flex-none ${open ? "lg:w-80" : "lg:w-60"}`}
     >
       <button
         type="button"
@@ -149,7 +150,7 @@ export function Hotlist({
 }) {
   const slots: (SpellRow | null)[] = Array.from({ length: 10 }, (_, i) => spells[i] ?? null);
   return (
-    <div className="hud-item fixed bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1">
+    <div className="hud-item fixed bottom-3 left-1/2 z-40 grid -translate-x-1/2 grid-cols-5 gap-1 sm:flex">
       {slots.map((sp, i) => (
         <button
           key={i}
@@ -177,7 +178,7 @@ export function Hotlist({
 
 export function Minimap({ floor, label }: { floor: number; label: string | null }) {
   return (
-    <div className="hud-item fixed bottom-3 right-3 z-40 hidden sm:block">
+    <div className="hud-item fixed bottom-3 right-3 z-40 hidden lg:block">
       <div className="relative h-24 w-24 overflow-hidden rounded-full border border-zinc-700 bg-zinc-950/90">
         <div
           className="animate-radar-sweep absolute inset-0"
@@ -206,7 +207,8 @@ export function HudRail({
   const current = tabs.find((t) => t.key === active);
   return (
     <>
-      <div className="hud-item fixed left-3 top-28 z-40 flex flex-col gap-1">
+      {/* Vertical rail in the desktop gutter; horizontal tab row in flow on phones. */}
+      <div className="hud-item z-40 flex flex-wrap gap-1 lg:fixed lg:left-3 lg:top-28 lg:flex-col">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -222,7 +224,7 @@ export function HudRail({
         ))}
       </div>
       {current && (
-        <div className="animate-hud-materialize fixed left-40 top-28 z-40 max-h-[70vh] w-[26rem] max-w-[75vw] overflow-y-auto rounded border border-zinc-800 bg-zinc-950/95 p-3">
+        <div className="animate-hud-materialize z-40 max-h-[60vh] overflow-y-auto rounded border border-zinc-800 bg-zinc-950/95 p-3 lg:fixed lg:left-40 lg:top-28 lg:max-h-[70vh] lg:w-[26rem] lg:max-w-[75vw]">
           {current.content}
         </div>
       )}
