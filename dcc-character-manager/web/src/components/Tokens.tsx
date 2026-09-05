@@ -3,6 +3,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { listen, privateChannel, topics } from "@/lib/realtime";
 import { assetUrl } from "@/lib/upload";
 import { penStrokeWidth, snapHalf } from "@/lib/stage";
 import { useUser } from "./AuthGate";
@@ -14,9 +15,11 @@ import { MapStage, StageTransformContext } from "./MapStage";
 import type { AoeMarker, AssetRow, MapGrid, MapRow, TokenRow } from "@/lib/types";
 
 /*
- * Tabletop tokens (migration 0011). Realtime rides `map:<mapId>`:
- * `token_move {id,x,y}` streams while a drag is in flight (throttled),
- * `token_upsert` / `token_remove` cover lifecycle. Postgres stays
+ * Tabletop tokens (migration 0011). Realtime rides two private topics
+ * (0016 authorizes per topic): `moves:<mapId>` carries `token_move {id,x,y}`
+ * while a drag is in flight (throttled; any member may publish, since
+ * players drag their own crawler), and `map:<mapId>` carries the GM-only
+ * `token_upsert` / `token_remove` lifecycle. Postgres stays
  * authoritative — drags persist through the move_token RPC on pointer-up,
  * and everything else is plain owner-RLS writes. Hidden tokens are the GM's
  * prep layer: RLS keeps them out of player reads, so the broadcast helpers
@@ -34,7 +37,8 @@ export function useMapTokens(mapId: string | null) {
   useEffect(() => {
     tokensRef.current = tokens;
   }, [tokens]);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const mapRef = useRef<RealtimeChannel | null>(null);
+  const movesRef = useRef<RealtimeChannel | null>(null);
   const throttle = useRef<{ timer: ReturnType<typeof setTimeout> | null; pending: { id: string; x: number; y: number } | null }>({
     timer: null,
     pending: null,
@@ -55,12 +59,11 @@ export function useMapTokens(mapId: string | null) {
         }
         setTokens((data as TokenRow[]) ?? []);
       });
-    const ch = sb
-      .channel(`map:${mapId}`)
-      .on("broadcast", { event: "token_move" }, ({ payload }) => {
-        const { id, x, y } = payload as { id: string; x: number; y: number };
-        setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x, y } : t)));
-      })
+    const moves = privateChannel(topics.moves(mapId)).on("broadcast", { event: "token_move" }, ({ payload }) => {
+      const { id, x, y } = payload as { id: string; x: number; y: number };
+      setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x, y } : t)));
+    });
+    const ch = privateChannel(topics.map(mapId))
       .on("broadcast", { event: "token_upsert" }, ({ payload }) => {
         const row = payload as TokenRow;
         setTokens((prev) =>
@@ -70,9 +73,11 @@ export function useMapTokens(mapId: string | null) {
       .on("broadcast", { event: "token_remove" }, ({ payload }) => {
         const { id } = payload as { id: string };
         setTokens((prev) => prev.filter((t) => t.id !== id));
-      })
-      .subscribe();
-    channelRef.current = ch;
+      });
+    listen(moves);
+    listen(ch);
+    mapRef.current = ch;
+    movesRef.current = moves;
     const th = throttle.current;
     return () => {
       cancelled = true;
@@ -80,12 +85,16 @@ export function useMapTokens(mapId: string | null) {
       th.timer = null;
       th.pending = null;
       sb.removeChannel(ch);
-      channelRef.current = null;
+      sb.removeChannel(moves);
+      mapRef.current = null;
+      movesRef.current = null;
     };
   }, [mapId]);
 
+  /** Route by event: drags go on the everyone-may-publish topic, lifecycle on the GM's. */
   const send = useCallback((event: string, payload: unknown) => {
-    channelRef.current?.send({ type: "broadcast", event, payload });
+    const ch = event === "token_move" ? movesRef.current : mapRef.current;
+    ch?.send({ type: "broadcast", event, payload });
   }, []);
 
   /** Optimistic local move + throttled broadcast; call every pointer-move. */

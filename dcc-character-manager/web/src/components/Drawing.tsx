@@ -3,6 +3,7 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { listen, privateChannel, topics } from "@/lib/realtime";
 import { StageTransformContext } from "./MapStage";
 import type { DrawingStroke, MapRow } from "@/lib/types";
 
@@ -48,8 +49,7 @@ export function useMapDrawings(map: MapRow | null) {
   useEffect(() => {
     if (!mapId) return;
     const sb = supabase();
-    const ch = sb
-      .channel(`draw:${mapId}`)
+    const ch = privateChannel(topics.draw(mapId))
       .on("broadcast", { event: "draw_progress" }, ({ payload }) => {
         setRemoteLive(payload as DrawingStroke);
       })
@@ -67,8 +67,8 @@ export function useMapDrawings(map: MapRow | null) {
       .on("broadcast", { event: "draw_clear" }, () => {
         setStrokes([]);
         setRemoteLive(null);
-      })
-      .subscribe();
+      });
+    listen(ch);
     channelRef.current = ch;
     const th = throttle.current;
     return () => {

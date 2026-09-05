@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { listen, privateChannel, topics } from "@/lib/realtime";
 import type { MapGrid, MapRow } from "@/lib/types";
 
 /*
- * Live map metadata (T13), on broadcast channel `mapmeta:<mapId>` (its own
- * topic — hooks never share a channel instance):
- * - `map_patch`: the GM's grid/name edits push to open player sheets, so
- *   recalibrating a live map no longer needs a reload (the old T5 gap).
- * - `ping`: shift+click "look HERE" flash, from anyone at the table.
+ * Live map metadata (T13), on two private topics (hooks never share a
+ * channel instance, and each topic has one owner hook):
+ * - `mapmeta:<mapId>` / `map_patch`: the GM's grid/name edits push to open
+ *   player sheets, so recalibrating a live map no longer needs a reload
+ *   (the old T5 gap). GM-only publish (0016).
+ * - `ping:<mapId>` / `ping`: shift+click "look HERE" flash, from anyone at
+ *   the table — its own topic because Realtime authorizes per topic.
  * Both are ephemeral; grid changes are persisted separately by the GM's
  * normal map write, and pings are meant to vanish.
  */
@@ -27,7 +30,8 @@ const PING_MS = 2400;
 
 export function useMapMeta(mapId: string | null, onPatch?: (patch: MapLivePatch) => void) {
   const [pings, setPings] = useState<MapPing[]>([]);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const metaRef = useRef<RealtimeChannel | null>(null);
+  const pingRef = useRef<RealtimeChannel | null>(null);
   const cb = useRef(onPatch);
   useEffect(() => {
     cb.current = onPatch;
@@ -40,24 +44,28 @@ export function useMapMeta(mapId: string | null, onPatch?: (patch: MapLivePatch)
   useEffect(() => {
     if (!mapId) return;
     const sb = supabase();
-    const ch = sb
-      .channel(`mapmeta:${mapId}`)
-      .on("broadcast", { event: "map_patch" }, ({ payload }) => cb.current?.(payload as MapLivePatch))
-      .on("broadcast", { event: "ping" }, ({ payload }) => {
-        const p = payload as MapPing;
-        setPings((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]));
-        expire(p.id);
-      })
-      .subscribe();
-    channelRef.current = ch;
+    const meta = privateChannel(topics.mapMeta(mapId)).on("broadcast", { event: "map_patch" }, ({ payload }) =>
+      cb.current?.(payload as MapLivePatch),
+    );
+    const ping = privateChannel(topics.ping(mapId)).on("broadcast", { event: "ping" }, ({ payload }) => {
+      const p = payload as MapPing;
+      setPings((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]));
+      expire(p.id);
+    });
+    listen(meta);
+    listen(ping);
+    metaRef.current = meta;
+    pingRef.current = ping;
     return () => {
-      sb.removeChannel(ch);
-      channelRef.current = null;
+      sb.removeChannel(meta);
+      sb.removeChannel(ping);
+      metaRef.current = null;
+      pingRef.current = null;
     };
   }, [mapId, expire]);
 
   const sendPatch = useCallback((patch: MapLivePatch) => {
-    channelRef.current?.send({ type: "broadcast", event: "map_patch", payload: patch });
+    metaRef.current?.send({ type: "broadcast", event: "map_patch", payload: patch });
   }, []);
 
   const sendPing = useCallback(
@@ -65,7 +73,7 @@ export function useMapMeta(mapId: string | null, onPatch?: (patch: MapLivePatch)
       const p: MapPing = { id: crypto.randomUUID(), x, y };
       setPings((prev) => [...prev, p]);
       expire(p.id);
-      channelRef.current?.send({ type: "broadcast", event: "ping", payload: p });
+      pingRef.current?.send({ type: "broadcast", event: "ping", payload: p });
     },
     [expire],
   );

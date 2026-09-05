@@ -4,6 +4,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
+import { joined, privateChannel, topics } from "@/lib/realtime";
 import { assetUrl } from "@/lib/upload";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
@@ -393,12 +394,15 @@ function GrantDialog({
       }
       // The reward-delivery fantasy: a private System overlay with the item's
       // image, plus a silent ping so an open inventory panel refetches.
-      const ch = sb.channel(`hud:character:${cid}`);
-      await new Promise<void>((resolve) =>
-        ch.subscribe((s) => {
-          if (s === "SUBSCRIBED") resolve();
-        }),
-      );
+      const ch = privateChannel(topics.characterHud(cid));
+      try {
+        await joined(ch);
+      } catch (e) {
+        // Granted (the RPC succeeded) but the live overlay couldn't be delivered.
+        failures.push(`granted, but no live delivery: ${e instanceof Error ? e.message : String(e)}`);
+        sb.removeChannel(ch);
+        continue;
+      }
       await ch.send({
         type: "broadcast",
         event: "system_send",

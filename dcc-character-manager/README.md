@@ -45,7 +45,7 @@ npm run dev
 ```
 
 Requires a free [Supabase](https://supabase.com) project — run the SQL files in
-`web/supabase/migrations/` (0001–0015, in order) and enable Email auth. Full steps in the
+`web/supabase/migrations/` (0001–0016, in order) and enable Email auth. Full steps in the
 [web README](web/README.md).
 
 ## Disclaimer

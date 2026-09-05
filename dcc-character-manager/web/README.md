@@ -34,8 +34,16 @@ truth for any rules question; code comments cite them by section/table.
   Send" panel (campaign page) broadcasts messages/images to `hud:campaign:<id>` (party)
   or `hud:character:<id>` (private), and can push a `hud_config` that switches HUD
   elements off on player screens. Sends are ephemeral broadcast — no tables involved,
-  receiving sheets must be open, and private targeting is client-side convenience, not a
-  security boundary. The exception is the **Area feed** (`SceneStage`): a persistent
+  receiving sheets must be open. As of migration 0016 these are **private** channels:
+  Realtime checks RLS on `realtime.messages` at join time via
+  `realtime_topic_access()`, so only a campaign's GM and members can receive, and
+  GM-only topics reject member publishes — private targeting is now an enforced
+  boundary, not just client convenience. All channels are opened through
+  `src/lib/realtime.ts` (topic grammar in `realtimeTopics.ts`, unit-tested), and the
+  authorization matrix is proven by `supabase/harness/` (`npm run harness`).
+  Authorization is per topic, not per event, so player-originated traffic (token
+  drags on `moves:<id>`, pings, bombs) rides its own topic beside the GM's lifecycle
+  channel. The exception is the **Area feed** (`SceneStage`): a persistent
   map/monster image saved to `campaigns.scene` (migration 0007) and displayed
   center-stage on every party sheet; live updates ride the same channel, while reloads
   and late joiners read the campaign row. The sheet has a 🎮 PLAY / 🛠 MANAGE toggle —
@@ -44,7 +52,7 @@ truth for any rules question; code comments cite them by section/table.
 - `src/app/` — pages: `/` dashboard · `/login` · `/characters/new` + `/characters/[id]`
   (sheet) · `/encounters/new` + `/encounters/[id]` (runner) · `/campaigns/new` +
   `/campaigns/[id]` (tracker) + `/campaigns/[id]/areas/[areaId]` (neighborhood/quest editor).
-- `supabase/migrations/` — 0001–0015, in order (0009 also creates the `assets`
+- `supabase/migrations/` — 0001–0016, in order (0009 also creates the `assets`
   storage bucket + its `storage.objects` policies via SQL — no dashboard steps;
   0010 adds tabletop `maps` — asset background + feet-calibrated grid jsonb +
   drawings jsonb — and `campaigns.active_map_id`, the map party sheets display.
@@ -121,6 +129,16 @@ truth for any rules question; code comments cite them by section/table.
   (expanding amber rings, self-expires). The stage supports touch: one-finger
   pan, two-finger pinch zoom (midpoint-anchored, pans with the midpoint).
   The Asset Library gained a 🧽 Orphans sweep (images nothing references).
+  0016 makes every Realtime channel **private**: `realtime_topic_access()`
+  (a SECURITY DEFINER function) backs two RLS policies on `realtime.messages`
+  that Realtime checks at join time, so only a campaign's GM/members can
+  subscribe and GM-only topics reject member publishes. Because Realtime
+  authorizes per topic, the token drag stream moved to its own `moves:<mapId>`
+  topic (anyone at the table may publish) beside the GM-only `map:<mapId>`
+  lifecycle topic, and pings likewise split to `ping:<mapId>`; the client
+  opens all of them through `src/lib/realtime.ts`. The `supabase/harness/`
+  runner (`npm run harness`) applies every migration to a throwaway Postgres
+  and asserts this whole policy matrix.
   All additive. RLS baseline is owner-only
   (`auth.uid() = owner_id`); migration 0008 layers **campaign membership** on top: players
   join with a short code (`join_campaign(code)` RPC, shown in the campaign page's Party
@@ -143,7 +161,7 @@ truth for any rules question; code comments cite them by section/table.
 
 ## Setup
 
-1. Create a Supabase project; run `supabase/migrations/0001…0015` in the SQL editor.
+1. Create a Supabase project; run `supabase/migrations/0001…0016` in the SQL editor.
 2. Enable Email auth (confirmation off is convenient for local dev).
 3. `cp .env.example .env.local`; fill the project URL + publishable key.
 4. `npm install && npm run dev`

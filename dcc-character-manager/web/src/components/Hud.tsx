@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { joined, listen, privateChannel, topics } from "@/lib/realtime";
 import { assetUrl } from "@/lib/upload";
 import { AssetPicker } from "./AssetLibrary";
 import type { SceneState, SpellRow } from "@/lib/types";
@@ -316,31 +317,45 @@ export function GmSendPanel({
   async function channelFor(name: string): Promise<RealtimeChannel> {
     let ch = channels.current.get(name);
     if (!ch) {
-      const created = supabase().channel(name);
+      const created = privateChannel(name);
       channels.current.set(name, created);
-      await new Promise<void>((resolve) =>
-        created.subscribe((s) => {
-          if (s === "SUBSCRIBED") resolve();
-        }),
-      );
+      try {
+        await joined(created);
+      } catch (e) {
+        // Refused join (0016 not applied, or not this campaign's GM): drop it so
+        // the next attempt retries instead of reusing a dead channel.
+        channels.current.delete(name);
+        supabase().removeChannel(created);
+        throw e;
+      }
       ch = created;
     }
     return ch;
   }
 
   function targetChannel(): Promise<RealtimeChannel> {
-    return channelFor(target === "all" ? `hud:campaign:${campaignId}` : `hud:character:${target}`);
+    return channelFor(target === "all" ? topics.campaignHud(campaignId) : topics.characterHud(target));
+  }
+
+  /** Publish on a HUD topic, turning a refused join into a status line instead of a hang. */
+  async function publish(channel: Promise<RealtimeChannel>, event: string, payload: unknown, ok: string) {
+    try {
+      await (await channel).send({ type: "broadcast", event, payload });
+      setStatus(ok);
+    } catch (e) {
+      setStatus(`System offline: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /** Area feed is always party-wide and persisted, unlike transient System sends. */
   async function setScene(next: SceneState) {
     onSceneChange?.(next);
-    await (await channelFor(`hud:campaign:${campaignId}`)).send({
-      type: "broadcast",
-      event: "scene",
-      payload: next,
-    });
-    setStatus(next.imageUrl || next.caption ? "Area feed updated on every open sheet." : "Area feed cleared.");
+    await publish(
+      channelFor(topics.campaignHud(campaignId)),
+      "scene",
+      next,
+      next.imageUrl || next.caption ? "Area feed updated on every open sheet." : "Area feed cleared.",
+    );
   }
 
   const targetLabel =
@@ -349,16 +364,22 @@ export function GmSendPanel({
   async function send() {
     if (!text.trim() && !imageUrl.trim()) return;
     const payload: SystemSend = { text: text.trim(), imageUrl: imageUrl.trim() || undefined };
-    await (await targetChannel()).send({ type: "broadcast", event: "system_send", payload });
-    setStatus(target === "all" ? "Broadcast to every open sheet in the party." : `Sent privately to ${targetLabel}.`);
+    await publish(
+      targetChannel(),
+      "system_send",
+      payload,
+      target === "all" ? "Broadcast to every open sheet in the party." : `Sent privately to ${targetLabel}.`,
+    );
     setText("");
     setImageUrl("");
   }
 
   async function applyHud() {
     const payload: HudConfig = { hidden };
-    await (await targetChannel()).send({ type: "broadcast", event: "hud_config", payload });
-    setStatus(
+    await publish(
+      targetChannel(),
+      "hud_config",
+      payload,
       hidden.length === 0
         ? `HUD fully restored for ${targetLabel}.`
         : `Switched off ${hidden.join(", ")} for ${targetLabel}.`,
@@ -520,20 +541,22 @@ export function useSystemSends(
   useEffect(() => {
     const sb = supabase();
     const channels = [
-      sb.channel(`hud:character:${characterId}`),
-      ...(campaignId ? [sb.channel(`hud:campaign:${campaignId}`)] : []),
+      privateChannel(topics.characterHud(characterId)),
+      ...(campaignId ? [privateChannel(topics.campaignHud(campaignId))] : []),
     ];
     for (const ch of channels) {
-      ch.on("broadcast", { event: "system_send" }, ({ payload }) => cb.current.onSend(payload as SystemSend))
+      listen(
+        ch
+          .on("broadcast", { event: "system_send" }, ({ payload }) => cb.current.onSend(payload as SystemSend))
         .on("broadcast", { event: "hud_config" }, ({ payload }) => cb.current.onConfig(payload as HudConfig))
         .on("broadcast", { event: "scene" }, ({ payload }) => cb.current.onScene(payload as SceneState))
         .on("broadcast", { event: "map_state" }, ({ payload }) =>
           cb.current.onMapState?.(payload as { activeMapId: string | null }),
         )
-        .on("broadcast", { event: "item_grant" }, ({ payload }) =>
-          cb.current.onItemGrant?.(payload as { itemId: string }),
-        )
-        .subscribe();
+          .on("broadcast", { event: "item_grant" }, ({ payload }) =>
+            cb.current.onItemGrant?.(payload as { itemId: string }),
+          ),
+      );
     }
     return () => {
       channels.forEach((ch) => sb.removeChannel(ch));

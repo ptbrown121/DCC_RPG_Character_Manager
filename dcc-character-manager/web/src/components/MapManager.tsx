@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { joined, privateChannel, topics } from "@/lib/realtime";
 import { useUser } from "./AuthGate";
 import { AssetPicker } from "./AssetLibrary";
 import { MapTokensPanel } from "./Tokens";
@@ -152,12 +153,15 @@ export function MapManager({
   /** Tell open player sheets which map is live now (they also read the row on load). */
   async function broadcastActive(activeMapId: string | null) {
     if (!channelRef.current) {
-      const ch = supabase().channel(`hud:campaign:${campaign.id}`);
-      await new Promise<void>((resolve) =>
-        ch.subscribe((s) => {
-          if (s === "SUBSCRIBED") resolve();
-        }),
-      );
+      const ch = privateChannel(topics.campaignHud(campaign.id));
+      try {
+        await joined(ch);
+      } catch (e) {
+        // The row is already persisted; players pick it up on reload.
+        console.warn("map_state not broadcast:", e);
+        supabase().removeChannel(ch);
+        return;
+      }
       channelRef.current = ch;
     }
     await channelRef.current.send({ type: "broadcast", event: "map_state", payload: { activeMapId } });

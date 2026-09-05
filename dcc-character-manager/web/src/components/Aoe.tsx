@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useDroppable } from "@dnd-kit/core";
 import { supabase } from "@/lib/supabase";
+import { listen, privateChannel, topics } from "@/lib/realtime";
 import { assetUrl } from "@/lib/upload";
 import { aoeRadiusPx } from "@/lib/stage";
 import type { AoeMarker, AssetRow, MapGrid, MapRow } from "@/lib/types";
@@ -41,8 +42,7 @@ export function useMapAoe(map: MapRow | null) {
   useEffect(() => {
     if (!mapId) return;
     const sb = supabase();
-    const ch = sb
-      .channel(`aoe:${mapId}`)
+    const ch = privateChannel(topics.aoe(mapId))
       .on("broadcast", { event: "aoe_add" }, ({ payload }) => {
         const m = payload as AoeMarker;
         setMarkers((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -50,8 +50,8 @@ export function useMapAoe(map: MapRow | null) {
       .on("broadcast", { event: "aoe_remove" }, ({ payload }) => {
         const { id } = payload as { id: string };
         setMarkers((prev) => prev.filter((m) => m.id !== id));
-      })
-      .subscribe();
+      });
+    listen(ch);
     channelRef.current = ch;
     return () => {
       sb.removeChannel(ch);
