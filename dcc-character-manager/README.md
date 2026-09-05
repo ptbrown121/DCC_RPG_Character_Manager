@@ -28,9 +28,12 @@ Studios), covering both sides of the table:
 
 - [`web/`](web/) — the app: Next.js + Tailwind + Supabase, deployable on Vercel. Setup,
   architecture, and conventions in its [README](web/README.md).
-- [`rules/`](rules/) — the rules knowledge base the app was built from (consolidated
-  reference docs + raw extraction notes). See its [README](rules/README.md) for which
-  document is canonical when.
+- `rules/` — **not in this repo** (gitignored). It is the owner's local rules knowledge
+  base: consolidated reference docs plus per-page extraction notes transcribed from the
+  purchased books, which can't be redistributed. Code comments in `web/src/lib/rules/`
+  cite it by section/table; if you have the books, the catalogs in that folder are the
+  readable form of the same data.
+- `plan/` — also local-only: working task breakdown and session notes.
 
 ## Quick start
 
@@ -42,7 +45,7 @@ npm run dev
 ```
 
 Requires a free [Supabase](https://supabase.com) project — run the SQL files in
-`web/supabase/migrations/` (0001–0006, in order) and enable Email auth. Full steps in the
+`web/supabase/migrations/` (0001–0015, in order) and enable Email auth. Full steps in the
 [web README](web/README.md).
 
 ## Disclaimer
